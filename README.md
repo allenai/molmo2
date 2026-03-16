@@ -141,7 +141,7 @@ Pretrained models can be downloaded and prepared with `scripts/prepare_pretraine
 
 For example:
 ```bash
-python scripts/prepare_pretrained_model.py qwen3_4b
+python scripts/prepare_pretrained_model.py qwen3_4b_instruct
 python scripts/prepare_pretrained_model.py siglip2
 ```
 
@@ -245,14 +245,15 @@ To start a debugging run:
 torchrun --nproc-per-node=1 launch_scripts/pretrain.py debug --save_folder=/path/to/save/folder
 ```
 
-To train with the Qwen3 4B LLM and the SigLIP vision encoder:
+To train with the Qwen3 4B Instruct LLM and the SigLIP vision encoder:
 
 ```bash
-WANDB_API_KEY=key torchrun --nproc-per-node=8 launch_scripts/pretrain.py qwen3_4b \
+WANDB_API_KEY=key torchrun --nproc-per-node=8 launch_scripts/pretrain.py qwen3_4b_instruct \
   --wandb.name=run_name --wandb.entity=entity --wandb.project=project \
   --save_folder=/path/to/save/folder
 ```
 
+Molmo2-8B uses `qwen3_8b`, Molmo2-4B uses `qwen3_4b_instruct`, and Molmo2-O-7B uses `olmo3_7b_instruct`.
 Under-the-hood, the `launch_scripts/pretrain.py` constructs a `TrainerConfig` object
 and then runs it. For fine-grained control, CLI args can be used to override parts of
 the `TrainerConfig`, for example, to run without wandb, use:
