@@ -62,6 +62,17 @@ class OLMoOutput(NamedTuple):
     Response mask for the input sequence, a tensor of shape `(batch_size, seq_len)
     """
 
+    # MolmoPoint output
+    patch_logits: Optional[torch.FloatTensor] = None
+
+    subpatch_logits: Optional[torch.FloatTensor] = None
+
+    location_logits: Optional[torch.FloatTensor] = None
+
+    point_start_q: Optional[torch.FloatTensor] = None
+
+    image_data_cache: Optional[torch.FloatTensor] = None
+
 
 class OLMoGenerateOutput(NamedTuple):
     token_ids: torch.LongTensor
@@ -75,6 +86,11 @@ class OLMoGenerateOutput(NamedTuple):
     The scores of the generated sequences, a tensor of shape `(batch_size, beam_size)`.
     """
 
+    token_target_ids: Optional[torch.LongTensor] = None
+    """
+    Token indices for generated points from MolmoPoint.
+    """
+
     internal: Optional[Dict] = None
     """
     Internal data the might be used for visualizations
@@ -86,6 +102,10 @@ class ModelBase(torch.nn.Module):
     def reset_parameters(self):
         """Re-initialize the weights from scratch"""
         raise NotImplementedError()
+
+    def get_legacy_key_mapping(self):
+        """Return a key map for legacy checkpoints"""
+        return None
 
     def reset_with_pretrained_weights(self):
         """Re-initialize the weights, possibly loading pretrained weights for the LLM and ViT"""

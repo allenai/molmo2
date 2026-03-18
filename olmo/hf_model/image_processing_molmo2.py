@@ -259,12 +259,13 @@ def image_to_patches_and_grids(
     image_patch_size: int,
     image_pooling_w: int,
     image_pooling_h: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     :return image_grids, the shape of each (low-res, high-res) image after pooling
     :return crops, the image crops to processes with the ViT
     :return pooled_patch_idx, for each patch_id tokens in `image_tokens`, the indices of the
                                 patches in `crops` to pool for that token, masked with -1
+    :rturn patch_idx_arr, map patch coordiantes to patch ids
     """
     if isinstance(base_image_input_size, int):
         base_image_input_size = (base_image_input_size, base_image_input_size)
@@ -298,6 +299,7 @@ def image_to_patches_and_grids(
         image_std,
         image_patch_size,
     )
+    patch_idx_arr += crop_patch_h*crop_patch_w
     crop_arr = np.concatenate([resized, crop_arr], 0)
 
     resize_idx = arange_for_pooling(resize_idx, pooling_h, pooling_w)
@@ -316,7 +318,8 @@ def image_to_patches_and_grids(
     return (
         np.stack(image_grid, 0),
         batch_pixels_to_patches(crop_arr, image_patch_size),
-        pooling_idx
+        pooling_idx,
+        patch_idx_arr
     )
 
 
@@ -395,6 +398,7 @@ class Molmo2ImageProcessor(BaseImageProcessor):
         patch_size: Optional[int] = None,
         pooling_size: Optional[list[int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        return_pointing_metadata: bool = False,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -428,6 +432,8 @@ class Molmo2ImageProcessor(BaseImageProcessor):
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                 - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+            return_patch_mappings (bool, optional):
+                Whether to return patch mappings used for decoding MolmoPoint points
 
         Returns:
             A `BatchFeature` containing the following keys:
@@ -473,6 +479,9 @@ class Molmo2ImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         data = {}
+        patch_mappings = []
+        absolute_token_pooling = []
+        offset = 0
         if images is not None:
             batch_grids = []
             batch_crops = []
@@ -480,7 +489,7 @@ class Molmo2ImageProcessor(BaseImageProcessor):
             batch_num_crops = []
 
             for image in images:
-                image_grid, crops, pooled_idx = image_to_patches_and_grids(
+                image_grid, crops, pooled_idx, patch_mapping = image_to_patches_and_grids(
                     image,
                     max_crops,
                     overlap_margins,
@@ -496,6 +505,12 @@ class Molmo2ImageProcessor(BaseImageProcessor):
                 batch_crops.append(crops)
                 batch_pooled_patches_idx.append(pooled_idx)
                 batch_num_crops.append(crops.shape[0])
+                if return_pointing_metadata:
+                    absolute_token_pooling.append(
+                        np.where(pooled_idx >= 0, pooled_idx + offset, -1))
+                    patch_mappings.append(patch_mapping + offset)
+                    n_patches = np.prod(crops.shape[:2])
+                    offset += n_patches
             
             pixel_values = np.concatenate(batch_crops, 0)
             image_token_pooling = np.concatenate(batch_pooled_patches_idx, 0)
@@ -509,7 +524,12 @@ class Molmo2ImageProcessor(BaseImageProcessor):
                 image_num_crops=image_num_crops,
             )
 
-        return BatchFeature(data, tensor_type=return_tensors)
+        data = BatchFeature(data, tensor_type=return_tensors)
+        if return_pointing_metadata:
+            data["image_token_pooling_np"] = np.concatenate(absolute_token_pooling, 0) if len(images) else None
+            data["subpatch_mapping"] = patch_mappings
+            data["image_sizes"] = [x.shape[:2][::-1] for x in images]
+        return data
 
 
 Molmo2ImageProcessor.register_for_auto_class()

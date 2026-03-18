@@ -11,6 +11,7 @@ from olmo.data.get_dataset import get_dataset_by_name
 from olmo.model_configs import SIGLIP2_VISION_BACKBONE
 from olmo.models.molmo2.molmo2 import Molmo2Config
 from olmo.models.molmo2.molmo2_preprocessor import Molmo2PreprocessorConfig
+from olmo.models.molmo_point.molmo_point import MolmoPointConfig, MolmoPointPreprocessorConfig
 from olmo.nn.llm import LlmConfig
 from olmo.nn.vision_backbone import MolmoVisionBackboneConfig
 from olmo.html_utils import example_to_html_dict, build_html_table
@@ -138,6 +139,31 @@ def main():
             vision_backbone=MolmoVisionBackboneConfig(vit=SIGLIP2_VISION_BACKBONE),
             data_formatter=formatter,
             mm_preprocessor=Molmo2PreprocessorConfig(
+                video=VideoPreprocessorConfig(
+                    pooling_h=3,
+                    pooling_w=3,
+                    time_mode="per-frame-compact",
+                    max_frames=128,
+                    loading_method="torchcodec_exact",
+                    time_sampling=True,
+                    frame_sample_mode="uniform_last_frame",
+                    max_fps=[2],
+                    max_subtitle_tokens=None,
+                ),
+                image=MultiCropConfig(
+                    crop_mode="resize",
+                    max_crops=4,
+                    max_images=5,
+                    max_multi_image_crops=4,
+                )
+            ),
+        )
+    elif args.model == "molmo_point":
+        model_cfg = MolmoPointConfig(
+            llm=llm_config,
+            vit=SIGLIP2_VISION_BACKBONE,
+            data_formatter=formatter,
+            mm_preprocessor=MolmoPointPreprocessorConfig(
                 video=VideoPreprocessorConfig(
                     pooling_h=3,
                     pooling_w=3,

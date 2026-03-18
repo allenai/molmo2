@@ -34,7 +34,8 @@ class MultiCropConfig(BaseConfig):
     use_single_crop_col_tokens: Optional[bool] = None
     use_single_crop_start_token: bool = False
 
-    def build_image_preprocessor(self, tokenizer, image_preprocessor, image_padding_mask=False, legacy_image_mask=False):
+    def build_image_preprocessor(self, tokenizer, image_preprocessor, image_padding_mask=False,
+                                 legacy_image_mask=False, use_low_res_token_global_crops=False):
         image = MultiCropImagePreprocessor(
             tokenizer,
             image_preprocessor,
@@ -48,6 +49,7 @@ class MultiCropConfig(BaseConfig):
             self.pooling_h,
             image_padding_mask,
             self.overlap_margins,
+            use_low_res_token_global_crops=use_low_res_token_global_crops,
             use_single_crop_col_tokens=self.use_single_crop_col_tokens,
             use_single_crop_start_token=self.use_single_crop_start_token,
         )
@@ -85,6 +87,7 @@ class MultiCropImagePreprocessor:
     image_padding_mask: Union[bool, int] = False
     overlap_margins: Tuple[int, int] = (4, 4)
 
+    use_low_res_token_global_crops: bool = False
     use_single_crop_col_tokens: Optional[bool] = None
     use_single_crop_start_token: bool = False
 
@@ -142,7 +145,7 @@ class MultiCropImagePreprocessor:
             pooling_idx = pooling_idx.reshape([-1, pooling_h*pooling_w])
             per_row = np.full(
                 (w,),
-                patch_id,
+                self.tokenizer.image_low_res_token_id if self.use_low_res_token_global_crops else patch_id,
                 dtype=np.int32
             )
             if use_single_crop_col_tokens:
@@ -209,11 +212,12 @@ class MultiCropImagePreprocessor:
                 pooling_idx + crop_patch_h*crop_patch_w,
                 -1
             )
+            patch_idx_arr += crop_patch_h*crop_patch_w
             pooling_idx = np.concatenate([resize_idx, pooling_idx])
 
             per_row = np.full(
                 (w,),
-                patch_id,
+                self.tokenizer.image_low_res_token_id if self.use_low_res_token_global_crops else patch_id,
                 dtype=np.int32
             )
             if use_single_crop_col_tokens:
@@ -240,6 +244,7 @@ class MultiCropImagePreprocessor:
                 images=images,
                 image_masks=mask_arr,
                 token_pooling=pooling_idx,
+                token_mapping=patch_idx_arr,
                 cum_token_pooling_bounds=cum_token_pooling_bounds,
                 cum_image_bounds=cum_image_bounds,
             )

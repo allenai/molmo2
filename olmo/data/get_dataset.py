@@ -3,7 +3,8 @@ import itertools
 
 from olmo.data.academic_image_datasets import Vqa2, TextVqa, InfoQa, DocQa, AI2D, PlotQa, FigureQa, \
     DvQa, OkVqa, MMMU, CoSyn, CoSynPoint, PixmoMulitDocQa, MathVista, RealWorldQa, ChartQa, AOkVqa, \
-    CountBenchQa, SceneTextQa, TabWMPDirectAnswer, TallyQa, PointBench, ScienceQAImageOnly
+    CountBenchQa, SceneTextQa, TabWMPDirectAnswer, TallyQa, PointBench, ScienceQAImageOnly, \
+    ScreenSpotV2, OSWorldG, ScreenSpotPro
 from olmo.data.academic_multi_image_datasets import MuirBench, BLINK, MMIU, MantisInstruct
 from olmo.data.academic_video_datasets import (
     Tomato, TemporalBenchQa, MotionBench,
@@ -25,9 +26,10 @@ from olmo.data.academic_video_track_datasets import (
 from olmo.data.dataset import Dataset
 from olmo.data.molmo2_datasets import (
     Molmo2CaptionsEval, Molmo2SynCaptionsQA, Molmo2SynCaptionsSubtitleQA, Molmo2HumanQA,
-    Molmo2VideoPoint, Molmo2VideoPointEval, Molmo2VideoCountEval,
+    Molmo2VideoPoint, Molmo2VideoPointEval, Molmo2VideoCountEval, Molmo2SyntheticPoint,
 )
-from olmo.data.molmo2_video_track_datasets import Molmo2VideoTrackInstruction, Molmo2VideoTrackEval
+from olmo.data.molmo2_video_track_datasets import Molmo2VideoTrackInstruction, Molmo2VideoTrackEval, \
+    MolmoPointTrackAny, MolmoPointTrackSyn
 from olmo.data.molmo_hardcode import Molmo2HardCodes
 from olmo.data.pixmo_datasets import PixMoMultiPoints, PixMoCapQa, PixMoCount, PixMoCap, \
     PixMoAskModelAnything, PixMoPoints, PixmoMultiImageQa, PixMoPointsEval
@@ -100,6 +102,26 @@ def get_dataset_by_name(dataset_name, split) -> Dataset:
     if dataset_name == "point_bench":
         assert split == "test"
         return PointBench()
+    if dataset_name == "molmo2_syn_point":
+        return Molmo2SyntheticPoint(split=split)
+    if dataset_name.startswith("screen_spot_v2"):
+        prompt = dataset_name.split("_", maxsplit=3)[-1]
+        if prompt == "v2":
+            prompt = "none"
+        assert split == "test"
+        return ScreenSpotV2(prompt=prompt)
+    if dataset_name.startswith("os_worldg"):
+        prompt = dataset_name.split("_", maxsplit=2)[-1]
+        if prompt == "worldg":
+            prompt = "none"
+        assert split == "test"
+        return OSWorldG(prompt=prompt)
+    if dataset_name.startswith("screen_spot_pro"):
+        prompt = dataset_name.split("_", maxsplit=3)[-1]
+        if prompt == "pro":
+            prompt = "none"
+        assert split == "test"
+        return ScreenSpotPro(prompt=prompt)
 
     # Multi-Image data
     if dataset_name == "muir_bench":
@@ -175,6 +197,27 @@ def get_dataset_by_name(dataset_name, split) -> Dataset:
         return Molmo2SynCaptionsSubtitleQA(split=split)
     if dataset_name == "molmo2_human_qa":
         return Molmo2HumanQA(split=split)
+    if dataset_name.startswith("vixmo_points_oversample_no_clip"):
+        return Molmo2VideoPoint(
+            split=split,
+            max_points=60,
+            max_seconds=None,
+            mode=["point_count", "point"],
+            multi_message_short_clips=True,
+            oversample=True,
+            p_multi_turn=0.2
+        )
+
+    if dataset_name.startswith("vixmo_points_oversample"):
+        return Molmo2VideoPoint(
+            split=split,
+            max_points=60,
+            max_seconds=63,
+            mode=["point_count", "point"],
+            multi_message_short_clips=True,
+            oversample=True,
+            p_multi_turn=0.2
+        )
     if dataset_name.startswith("molmo2_video_point_minmax"):
         min_points = int(dataset_name.split("_")[4])
         max_points = int(dataset_name.split("_")[5])
@@ -463,7 +506,13 @@ def get_dataset_by_name(dataset_name, split) -> Dataset:
         return Molmo2VideoTrackInstruction(split=split, task="single_point_track", sampling_fps=1)
     if dataset_name == "molmo2_video_single_point_track_2fps":
         return Molmo2VideoTrackInstruction(split=split, task="single_point_track", sampling_fps=2)
-    
+
+    # MolmoPoint Track datsets
+    if dataset_name == "molmo_point_track_any":
+        return MolmoPointTrackAny(split=split, task="track")
+    if dataset_name == "molmo_point_track_syn":
+        return MolmoPointTrackSyn(split=split, task="track")
+
     # Molmo2 video track eval
     if dataset_name == "molmo2_video_track_eval_1fps": # all dataset; track at 1 fps
         return Molmo2VideoTrackEval(split=split, task="track", sampling_fps=1)

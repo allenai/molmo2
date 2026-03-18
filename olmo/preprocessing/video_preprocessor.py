@@ -176,8 +176,6 @@ class TokenIndexingVideoPreprocessor:
             images=batch_pixels_to_patches(resized, image_patch_size),
             token_pooling=high_res_idx.reshape(high_h*high_w*n_frames, -1),
             token_mapping=np.arange(n_frames*crop_patch_h*crop_patch_w).reshape(n_frames, crop_patch_h, crop_patch_w),
-            cum_token_pooling_bounds=cum_token_pooling_bounds,
-            cum_image_bounds=cum_image_bounds,
         )
 
     def __call__(

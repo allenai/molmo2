@@ -29,9 +29,15 @@ FRAME_END_TOKEN= f"<frame_end>"
 IM_COL_TOKEN = f"<im_col>"
 IMAGE_PROMPT = "<|image|>"
 VIDEO_PROMPT = "<|video|>"
+# For MolmoPoint
+POINT_PROMPT = "<|points|>"
+TOKEN_INDEX_TOKEN = "<|token_index|>"
+SUBPATCH_INDEX_TOKEN = "<|vit_index|>"
+LOCATION_CLS_TOKEN = "<|vit_loc|>"
 
 EXTRA_TOKENS = (IM_START_TOKEN, IM_END_TOKEN, IMAGE_PATCH_TOKEN, IM_COL_TOKEN, LOW_RES_IMAGE_START_TOKEN,
-                IMAGE_PROMPT, IMAGE_LOW_RES_TOKEN, FRAME_START_TOKEN, FRAME_END_TOKEN, VIDEO_PROMPT)
+                IMAGE_PROMPT, IMAGE_LOW_RES_TOKEN, FRAME_START_TOKEN, FRAME_END_TOKEN, VIDEO_PROMPT,
+                POINT_PROMPT, TOKEN_INDEX_TOKEN, SUBPATCH_INDEX_TOKEN, LOCATION_CLS_TOKEN)
 
 
 class HfTokenizerWrapper:
@@ -62,6 +68,9 @@ class HfTokenizerWrapper:
         self.frame_start_token_id = special_tokens[FRAME_START_TOKEN]
         self.frame_end_token_id = special_tokens[FRAME_END_TOKEN]
         self.video_prompt_token_id = special_tokens[VIDEO_PROMPT]
+        self.token_index_token_id = special_tokens[TOKEN_INDEX_TOKEN]
+        self.subpatch_index_token_id = special_tokens[SUBPATCH_INDEX_TOKEN]
+        self.subpatch_loc_token_id = special_tokens[LOCATION_CLS_TOKEN]
 
     def encode(self, x: str):
         return self.tokenizer.encode(x, add_special_tokens=False)

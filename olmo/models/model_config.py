@@ -16,10 +16,13 @@ def get_model_types() -> Dict[str, Type['BaseModelConfig']]:
     # import here to avoid circular imports
     from olmo.models.molmo.molmo import MolmoConfig
     from olmo.models.molmo2.molmo2 import Molmo2Config
+    from olmo.models.molmo_point.molmo_point import MolmoPointConfig
 
     return {
         MolmoConfig._model_name: MolmoConfig,
         Molmo2Config._model_name: Molmo2Config,
+        MolmoPointConfig._model_name: MolmoPointConfig,
+        "token_indexing_video_molmo2": MolmoPointConfig,
     }
 
 

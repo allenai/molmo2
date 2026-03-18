@@ -159,16 +159,30 @@ def get_fps_from_text(text):
     return max(1, fps)  # Ensure at least 1 fps
 
 
-def build_video_asset(video_src, src_folder):
+def build_video_asset(video_src, src_folder, clip=None):
     assert isinstance(video_src, str)
-    image_key = compute_hash(video_src)
+    if clip is None:
+        key = compute_hash(video_src)
+        video_file = join(src_folder, key)
+        if not exists(video_file):
+            logging.info(f"Adding {video_file} to asset cache")
+            shutil.copy(video_src, video_file)
+    else:
+        key = compute_hash(video_src + "|||" + str(clip))
+        video_file = join(src_folder, key)
+        if not exists(video_file):
+            logging.info(f"Adding {video_file} {clip} to asset cache")
+            import ffmpeg
+            input_file = ffmpeg.input(video_src).trim(start=clip[0], end=clip[1]).setpts('PTS-STARTPTS')
+            output_file = ffmpeg.output(input_file, video_file, format='mp4')
+            ffmpeg.run(output_file)
     asset_dir = join(src_folder, "assets")
     os.makedirs(asset_dir, exist_ok=True)
-    image_file = join(asset_dir, image_key)
-    if not exists(image_file):
-        logging.info(f"Adding {image_file} to asset cache")
-        shutil.copy(video_src, image_file)
-    return f'<video style="max-height: 448px; max-width: 448px" controls><source src="/assets/{image_key}"></video>'
+    video_file = join(asset_dir, key)
+    if not exists(video_file):
+        logging.info(f"Adding {video_file} to asset cache")
+        shutil.copy(video_src, video_file)
+    return f'<video style="max-height: 448px; max-width: 448px" controls><source src="/assets/{key}"></video>'
 
 
 def build_image_asset(image_src, src_folder=None):

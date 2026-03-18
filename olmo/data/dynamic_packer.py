@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Tuple, Optional
 import numpy as np
 
 from olmo.config import BaseConfig
+from olmo.models.molmo_point.molmo_point_example_preprocessor import NO_POINTS_LABEL
 from olmo.preprocessing.preprocessor_utils import TOKEN_POOLING_KEYS
 from olmo.dist_util import get_cp_mesh
 from olmo.torch_util import get_rank
@@ -233,13 +234,16 @@ def pack(*examples: Dict) -> Dict:
 
     offset = 0
     if "point_target_ids" in keys:
+        dim = [example["point_target_ids"] for example in examples
+               if "point_target_ids" in example][0].shape[1]
         for ex in examples:
             if "point_target_ids" in ex:
                 target_ids = ex["point_target_ids"]
+                patch_ids = target_ids[:, 0]
                 target_ids[:, 0] = np.where(
-                    target_ids[:, 0] >= 0, target_ids[:, 0] + offset, target_ids[:, 0])
+                    (patch_ids >= 0) & (patch_ids != NO_POINTS_LABEL), patch_ids + offset, patch_ids)
             else:
-                ex["point_target_ids"] = np.zeros([0, 2], dtype=np.int64)
+                ex["point_target_ids"] = np.zeros([0, dim], dtype=np.int64)
             if "token_pooling" in ex:
                 n_image_tokens = np.any(ex["token_pooling"] >= 0, -1).sum()
                 offset += n_image_tokens

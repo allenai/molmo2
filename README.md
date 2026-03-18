@@ -23,8 +23,12 @@
 </p>
 
 
-This repository is for training and using Ai2's open vision language model, Molmo2.
+This repository is for training and using Ai2's open vision language models, Molmo2 and MolmoPoint.
 Molmo2 is state-of-the-art among open-source models and demonstrates exceptional new capabilities in point-driven grounding in single image, multi-image, and video tasks as shown below.
+MolmoPoint is an extension with a new architecture for pointing.
+This README is mostly concerned with Molmo2, see [MolmoPoint](https://github.com/allenai/molmo2/MOLMO_POINT_README.md) 
+for how to train MolmoPoint.
+
 
 <div align="center">
   <img src="assets/molmo2_capabilities.png" alt="Molmo2 Capabilites" width="1200" style="margin-left:'auto' margin-right:'auto' display:'block'"/>
@@ -32,6 +36,7 @@ Molmo2 is state-of-the-art among open-source models and demonstrates exceptional
 
 See our [blog post](https://allenai.org/blog/molmo2) or our [paper](https://arxiv.org/abs/2601.10611) for more details about Molmo2.
 Huggingface models can be found [here](https://huggingface.co/collections/allenai/molmo2).
+
 
 ## Table of Contents
 - [Setup](#setup)
@@ -53,6 +58,9 @@ Huggingface models can be found [here](https://huggingface.co/collections/allena
   - [Transformers Inference](#transformers-inference)
     - [Image Inference Example](#image-inference-example)
     - [Video Inference Example](#video-inference-example)
+  - [MolmoPoint Transformers Inference](#molmopoint-transformers-inference)
+      - [Image Inference Example](#image-inference-example)
+      - [Video Inference Example](#video-inference-example)
   - [Fast Inference with vLLM](#fast-inference-with-vllm)
     - [Install Vision Process Package](#install-vision-process-package)
     - [Install vLLM (\>= 0.15.0)](#install-vllm--0150)
@@ -254,6 +262,7 @@ WANDB_API_KEY=key torchrun --nproc-per-node=8 launch_scripts/pretrain.py qwen3_4
 ```
 
 Molmo2-8B uses `qwen3_8b`, Molmo2-4B uses `qwen3_4b_instruct`, and Molmo2-O-7B uses `olmo3_7b_instruct`.
+
 Under-the-hood, the `launch_scripts/pretrain.py` constructs a `TrainerConfig` object
 and then runs it. For fine-grained control, CLI args can be used to override parts of
 the `TrainerConfig`, for example, to run without wandb, use:
@@ -289,7 +298,9 @@ To launch a debug run:
 torchrun --nproc-per-node=1 launch_scripts/sft.py /path/to/pretrained/model debug --debug --save_folder=dbg --save_overwrite
 ```
 
-This will run a lightweight version of the model and a small dataset to allow easier debugging
+This will run a lightweight version of the model and a small dataset to allow easier debugging.
+
+For MolmoPoint, we used `launch_scripts/sft.py /path/to/pretrained/molmo_point/model molmo_point` instead.
 
 ## Long-Context SFT Training
 Long-context training is done with the same script. If you have B200s you can run it like this:

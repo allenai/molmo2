@@ -16,11 +16,11 @@ import numpy as np
 import datasets
 from PIL import Image
 from cached_path import cached_path
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, snapshot_download
 
 from olmo.data.dataset_builders.count_bench_qa import CountQaBuilder
 from olmo.data.dataset_builders.tabe_wmpd import TabMwpBuilder
-from olmo.io import read_file, write_json
+from olmo.io import read_file, write_json, list_directory
 
 from olmo.util import flatten_list, resource_path
 
@@ -1022,4 +1022,126 @@ class ScienceQAImageOnly(Dataset):
             style="science_qa",
             answer_idx=ex["answer"],
             options=ex["choices"],
+        )
+
+
+def _get_gui_instruct_prompt(prompt_format, instruction):
+    if prompt_format == "find":
+        return "Find " + instruction
+    elif prompt_format == "demo_find":
+        return "demo: Find " + instruction
+    elif prompt_format == "none":
+        return instruction
+    elif prompt_format == "click":
+        return "Click " + instruction
+    else:
+        raise ValueError(f"Unknown prompt: {prompt_format}")
+
+
+class ScreenSpotV2(Dataset):
+    data_path = join(DATA_HOME, "ScreenSpot-v2")
+
+    @classmethod
+    def download(cls, n_procs=1):
+        if not exists(cls.data_path):
+            log.info(f"Downloading ScreenSpot-v2...")
+            snapshot_download(
+                repo_id="OS-Copilot/ScreenSpot-v2",
+                repo_type="dataset",
+                local_dir=cls.data_path,
+                local_dir_use_symlinks=False,
+                max_workers=n_procs
+            )
+            image_zip_file = join(cls.data_path, "screenspotv2_image.zip")
+            log.info(f"Extracting {image_zip_file}")
+            with zipfile.ZipFile(image_zip_file, 'r') as zip_ref:
+                zip_ref.extractall(cls.data_path)
+            os.remove(image_zip_file)
+
+    def __init__(self, kinds=("desktop", "web", "mobile"), prompt="find"):
+        all_data = []
+        self.prompt = prompt
+        for kind in kinds:
+            with open(join(self.data_path, f"screenspot_{kind}_v2.json")) as f:
+                data = json.load(f)
+                for ex in data:
+                    ex["kind"] = kind
+                all_data += [ex for ex in data]
+        self.data = all_data
+
+    def __len__(self):
+        return len(self.data)
+
+    def get(self, item, rng):
+        ex = self.data[item]
+        metadata = {k: ex[k] for k in ["kind", "bbox", "data_type", "data_source", "instruction", "img_filename"]}
+        return dict(
+            instruction=ex["instruction"],
+            img_filename=ex["img_filename"],
+            image=join(self.data_path, "screenspotv2_image", ex["img_filename"]),
+            prompt=_get_gui_instruct_prompt(self.prompt, ex["instruction"]),
+            metadata=metadata,
+            style="user_qa"
+        )
+
+
+class ScreenSpotPro(Dataset):
+    data_path = join(DATA_HOME, "ScreenSpotPro")
+
+    @classmethod
+    def download(cls, n_procs=1):
+        if not exists(cls.data_path):
+            log.info(f"Downloading ScreenSpotPro...")
+            snapshot_download(
+                repo_id="likaixin/ScreenSpot-Pro",
+                repo_type="dataset",
+                local_dir=cls.data_path,
+                local_dir_use_symlinks=False,
+                max_workers=n_procs
+            )
+
+    def __init__(self, prompt="find"):
+        all_data = []
+        self.prompt = prompt
+        for file in list_directory(join(self.data_path, "annotations")):
+            with open(join(self.data_path, "annotations", file)) as f:
+                all_data += json.load(f)
+        self.data = all_data
+
+    def __len__(self):
+        return len(self.data)
+
+    def get(self, item, rng):
+        ex = self.data[item]
+        metadata = {k: ex[k] for k in ["bbox", "instruction", "id", "application", "platform", "ui_type", "group"]}
+        return dict(
+            image=join(self.data_path, "images", ex["img_filename"]),
+            prompt=_get_gui_instruct_prompt(self.prompt, ex["instruction"]),
+            metadata=metadata,
+            style="user_qa"
+        )
+
+
+class OSWorldG(Dataset):
+    HF_PATH = "MMInstruction/OSWorld-G"
+
+    @classmethod
+    def download(cls, n_procs=1):
+        datasets.load_dataset_builder("MMInstruction/OSWorld-G").download_and_prepare(num_proc=n_procs)
+
+    def __init__(self, prompt="none"):
+        self.data = datasets.load_dataset(self.HF_PATH, split="test")
+        self.prompt = prompt
+
+    def __len__(self):
+        return len(self.data)
+
+    def get(self, item, rng):
+        ex = self.data[item]
+        metadata = {k: ex[k] for k in ["box_coordinates", "instruction", "id", "box_type"]}
+        return dict(
+            image=ex["image"],
+            prompt=_get_gui_instruct_prompt(self.prompt, ex["instruction"]),
+            metadata=metadata,
+            style="user_qa"
         )

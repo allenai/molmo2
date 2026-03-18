@@ -76,6 +76,17 @@ def sum_metric(v):
     return metric
 
 
+def _extract_image_points(predictions, ix, image_w, image_h):
+    if "points" in predictions:
+        points = predictions["points"][ix]
+        if len(points) > 0:
+            points = points[:, 1:]
+    else:
+        text = predictions["predictions_text"][ix]
+        points = extract_points(text, image_w, image_h)
+    return points
+
+
 @dataclasses.dataclass
 class HtmlTable:
     """Returned as special metric for visualizing predictions"""
@@ -2915,18 +2926,134 @@ class PointBenchEval(Evaluator):
         prompt_text = predictions["prompts_text"]
         scores = []
         category_scores = {cat: [] for cat in self.CATEGORIES}
-        for metadata, response in zip(metadatas, response_text):
+        for ix, metadata in enumerate(metadatas):
             image_w, image_h = metadata["image_size"]
             mask = metadata["mask"]
-            points = extract_points(response, image_w, image_h)
+            points = _extract_image_points(predictions, ix, image_w, image_h)
             mask_h, mask_w = mask.shape[:2]
             if mask_h != image_h or mask_w != image_w:
                 logging.warning(f"Mask and image have different shapes: {(mask_w, mask_h)} {(image_w, image_h)}")
-            points_in_mask = True
-            for x, y in points:
-                if not self.is_point_in_mask(x, y, mask, image_w, image_h):
-                    points_in_mask = False
-                    break
+            if len(points) == 0:
+                points_in_mask = False
+            else:
+                points_in_mask = True
+                for x, y in points:
+                    if not self.is_point_in_mask(x, y, mask, image_w, image_h):
+                        points_in_mask = False
+                        break
             scores.append(points_in_mask)
             category_scores[metadata["category"]].append(points_in_mask)
         return {k: mean_metric(v) for k, v in category_scores.items()}
+
+
+class ScreenSpotEvaluator:
+    kinds = ("desktop", "web", "mobile")
+    types = ["icon", "text"]
+
+    def __call__(self, metadatas, predictions, tokenizer, step=None):
+        response_text = predictions["predictions_text"]
+        prompt_text = predictions["prompts_text"]
+        scores = {}
+        for k in self.kinds:
+            scores[k] = []
+            for t in self.types:
+                scores[f"{k}-{t}"] = []
+        for ix, (metadata, response) in enumerate(zip(metadatas, response_text)):
+            model_points = _extract_image_points(predictions, ix, *metadata["image_size"])
+            if len(model_points) == 0:
+                acc = 0
+            else:
+                x, y = model_points[0]
+                bbox = metadata["bbox"]
+                bbox = [bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]]
+                acc = (bbox[0] <= x <= bbox[2]) and (bbox[1] <= y <= bbox[3])
+            scores[f"{metadata['kind']}"].append(acc)
+            scores[f"{metadata['kind']}-{metadata['data_type']}"].append(acc)
+        return {k: mean_metric(v) for k, v in scores.items()}
+
+
+class ScreenSpotProEvaluator:
+    CATEGORIES = {
+        "Creative": [
+            "blender",
+            "davinci",
+            "fruitloops",
+            "illustrator",
+            "photoshop",
+            "premiere",
+            "unreal_engine"
+        ],
+        "Office": [
+            "excel",
+            "powerpoint",
+            "word"
+        ],
+        "Dev": [
+            "android_studio",
+            "pycharm",
+            "quartus",
+            "vmware",
+            "vscode"
+        ],
+        "CAD": [
+            "autocad",
+            "inventor",
+            "solidworks",
+            "vivado"
+        ],
+        "Scientific": [
+            "eviews",
+            "matlab",
+            "origin",
+            "stata"
+        ],
+        "OS": [
+            "linux_common",
+            "macos_common",
+            "windows_common"
+        ]
+    }
+
+    def __call__(self, metadatas, predictions, tokenizer, step=None):
+        response_text = predictions["predictions_text"]
+        prompt_text = predictions["prompts_text"]
+        scores = {
+            "overall": [],
+        }
+        for cat, subcats in self.CATEGORIES.items():
+            scores[cat] = []
+            for subcat in subcats:
+                scores[f"{cat}-{subcat}"] = []
+        for ix, (metadata, response) in enumerate(zip(metadatas, response_text)):
+            model_points = _extract_image_points(predictions, ix, *metadata["image_size"])
+            if len(model_points) == 0:
+                acc = 0
+            else:
+                x, y = model_points[0]
+                bbox = metadata["bbox"]
+                acc = (bbox[0] <= x <= bbox[2]) and (bbox[1] <= y <= bbox[3])
+            scores[f"{metadata['group']}-{metadata['application']}"].append(acc)
+            scores[f"{metadata['group']}"].append(acc)
+            scores[f"overall"].append(acc)
+        return {k: mean_metric(v) for k, v in scores.items()}
+
+
+class OsWorldGEvaluator:
+
+    def __call__(self, metadatas, predictions, tokenizer, step=None):
+        response_text = predictions["predictions_text"]
+        prompt_text = predictions["prompts_text"]
+        scores = {
+            "overall": [],
+        }
+        for ix, (metadata, response) in enumerate(zip(metadatas, response_text)):
+            model_points = _extract_image_points(predictions, ix, *metadata["image_size"])
+            if len(model_points) == 0:
+                acc = 0
+            else:
+                x, y = model_points[0]
+                bbox = metadata["box_coordinates"]
+                bbox = [bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]]
+                acc = (bbox[0] <= x <= bbox[2]) and (bbox[1] <= y <= bbox[3])
+            scores[f"overall"].append(acc)
+        return {k: mean_metric(v) for k, v in scores.items()}

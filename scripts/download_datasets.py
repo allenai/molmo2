@@ -69,7 +69,9 @@ DATASET_GROUPS = {
         "moca_track",
 
         "molmo2_video_track",
-        
+        "molmo_point_track_any",
+        "molmo_point_track_syn",
+
         # sot
         "webuav_single_point_track",
         "got10k_single_point_track",

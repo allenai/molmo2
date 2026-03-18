@@ -9,6 +9,9 @@ from olmo.data.dynamic_packer import PackingConfig
 from olmo.eval.eval_utils import get_evaluation
 from olmo.models.molmo2.molmo2 import Molmo2, Molmo2Config
 from olmo.models.molmo2.molmo2_preprocessor import Molmo2PreprocessorConfig
+from olmo.models.molmo_point.molmo_point import MolmoPointConfig, MolmoPointPreprocessorConfig
+from olmo.models.molmo_point.molmo_point_connector import ConnectorConfig
+from olmo.models.molmo_point.molmo_point_data_formatter import MolmoPointDataFormatter
 from olmo.preprocessing.data_formatter import DataFormatter
 from olmo.models.molmo.molmo_preprocessor import MolmoPreprocessorConfig
 from olmo.data.pixmo_datasets import PixMoCap
@@ -36,7 +39,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(prog="Train a captioner")
     parser.add_argument("llm", choices=["debug"] + list(LLMS.keys()))
-    parser.add_argument("--model", default="molmo2", choices=["debug", "molmo", "molmo2"])
+    parser.add_argument("--model", default="molmo2", choices=["debug", "molmo", "molmo2", "molmo_point"])
     parser.add_argument("--vision_backbone", choices=list(VISION_BACKBONES.keys()), default="siglip2")
     parser.add_argument("--global_batch_size", default=128, type=int)
     parser.add_argument("--n_eval_examples", default=2048, type=int)
@@ -135,6 +138,62 @@ if __name__ == "__main__":
                         overlap_margins=(4, 4)
                     )
                 )
+            )
+        if args.model == "molmo_point":
+            # MolmoPoint was pre-trained with fewer steps but up to 16 images per a sequence
+            # to improve packing
+            duration = 23000
+            model_cfg = MolmoPointConfig(
+                data_formatter=MolmoPointDataFormatter(
+                    system_prompt='style_and_length_v2',
+                    message_format="qwen3",
+                    include_point_number="no_space_id_last",
+                ),
+                llm=replace(
+                    LLMS[args.llm],
+                    residual_dropout=0.0,
+                    response_residual_dropout=0.1,
+                    additional_vocab_size=128,
+                    can_predict_extra_tokens=True
+                ),
+                patch_embed_dim=512,
+                vit=VISION_BACKBONES[args.vision_backbone],
+                connector=ConnectorConfig(
+                    vit_layers=vit_layers,
+                    image_projector="mlp",
+                    positional_embeddings=None,
+                    query="mean",
+                    pooling_out_layer=False,
+                    normalize_on_gpu=True
+                ),
+                mm_preprocessor=MolmoPointPreprocessorConfig(
+                    video=VideoPreprocessorConfig(
+                        max_frames=16,
+                        pooling_h=3,
+                        pooling_w=3,
+                        frame_sample_mode="uniform_last_frame",
+                        time_sampling=True,
+                        loading_method="torchcodec_exact",
+                        max_fps=[2],
+                        per_frame_special_token=True,
+                        use_frame_special_tokens=True
+                    ),
+                    image=MultiCropConfig(
+                        use_single_crop_start_token=True,
+                        use_single_crop_col_tokens=False,
+                        use_col_tokens=True,
+                        crop_mode="overlap-and-resize-c2",
+                        max_crops=8,
+                        max_images=1,
+                        max_multi_image_crops=1
+                    )),
+                no_more_points_class=True,
+                layer_norm_x=True,
+                norm_logits=True,
+                patch_embedding_kind="image_feature0",
+                embed_selected_vit_patch="linear",
+                patch_location="3x3",
+                bi_directional_attn="image_tokens",
             )
         else:
             raise NotImplementedError(args.model)

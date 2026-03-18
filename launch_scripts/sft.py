@@ -171,6 +171,62 @@ TRACKING_MIXTURE = [
 ]
 
 
+# Updated tracking mixture used in MolmoPoint
+TRACKING_MIXTURE_v2_1 = [
+    ["track", [
+        "mevis_track",
+        "ref_yt_vos_track",
+        "lv_vis_track",
+        ("vicas_track", 30000),
+        "revos_track",
+        "molmo2_video_track",
+        "molmo_point_track_any",
+        ("molmo_point_track_syn", 10000),
+    ], 0.45],
+    ["track_dist_tail", [
+        "burst_track",
+        "ref_davis17_track",
+        "yt_vis_track",
+        "moca_track",
+    ], 0.07],
+    ["ground", [
+        "mevis_ground",
+        "lv_vis_ground",
+        ("vicas_ground", 30000),
+        "revos_ground",
+        "molmo2_video_track_ground",
+    ], 0.2],
+    ["ground_dist_tail", [
+        "burst_ground",
+        "moca_ground",
+    ], 0.01],
+    ["single_point_track", [
+        "mevis_single_point_track",
+        "lv_vis_single_point_track",
+        ("vicas_single_point_track", 30000),
+        "revos_single_point_track",
+        "molmo2_video_single_point_track",
+    ], 0.15],
+    ["sot_from_bbox", [
+        "webuav_single_point_track",
+        "got10k_single_point_track",
+        "vasttrack_single_point_track",
+        "trackingnet_single_point_track",
+    ], 0.2],
+    ["sot_from_bbox_dist_tail", [
+        "burst_single_point_track",
+        "lvosv1_single_point_track",
+        "lvosv2_single_point_track",
+        "lasot_single_point_track",
+        "uwcot_single_point_track",
+        "webuot_single_point_track",
+        "latot_single_point_track",
+        "tnl2k_single_point_track",
+        "tnllt_single_point_track",
+    ], 0.1],
+]
+
+
 def get_model(checkpoint, model):
     model_cfg = MolmoConfig.load(join(checkpoint, "config.yaml"), key="model")
     video_preprocessor_cfg = VideoPreprocessorConfig(
@@ -299,6 +355,71 @@ def get_training_mixture(name):
                 WeightedDataset("pixmo_points_high_freq_train", message_weight=point_weight, override_p_high_res=pointing_high_res),
                 WeightedDataset("cosyn_point", message_weight=point_weight, override_p_high_res=pointing_high_res),
             ], 0.1],
+            ["nlp", ["tulu4"], 0.1 - hardcode_weight],
+            ["hardcodes", ["molmo2_hardcodes"], hardcode_weight]
+        ]
+    elif name in ["molmo_point", "molmo_point_long_context"]:
+        pointing_high_res = 0.30
+        point_weight = MessageWeight(weight=0.2, root_length=False, root_subsegments=False)
+        cap_weight = MessageWeight(weight=0.1, root_length=False, root_subsegments=False)
+        if "no-weight" in name:
+            cap_weight, point_weight = None, None
+        if name == "molmo_point_long_context":
+            video_pointing = [
+                ["vixmo_points_oversample_no_clip", 0.8],
+                ["academic_points_clip_63s_2fps", 0.2]
+            ]
+        else:
+            video_pointing = [
+                ["vixmo_points_oversample", 0.8],
+                ["academic_points_clip_63s_2fps", 0.2]
+            ]
+        hardcode_weight = 0.0005
+        academic = IMAGE_ACADEMIC_DATASETS + VIDEO_ACADEMIC_DATASETS
+        max_text_len = None
+        track_mix = TRACKING_MIXTURE_v2_1
+        total = np.sum([x[-1] for x in track_mix])
+        track_tasks = []
+        for name, datasets, weight in track_mix:
+            for dataset in datasets:
+                if isinstance(dataset, tuple):
+                    dataset, root_size_factor = dataset
+                else:
+                    root_size_factor = None
+                track_tasks.append(WeightedDataset(
+                    dataset, sampling_rate=float(weight/total), root_size_factor=root_size_factor,
+                    message_weight=point_weight
+                ))
+
+        video_pointing_tasks = []
+        for task, weight in video_pointing:
+            video_pointing_tasks.append(WeightedDataset(
+                task, sampling_rate=weight, root_size_factor=1,
+                message_weight=point_weight
+            ))
+
+        training_mixture = [
+            ["demo", [
+                "pixmo_ask_model_anything",
+                ("pixmo_cap", 100000),
+                "pixmo_cap_qa_as_user_qa",
+                "correction_qa_multi_only_max5",
+                "vixmo_human_qa",
+                WeightedDataset("vixmo3_top_level_captions_min_3", root_size_factor=None,
+                                sampling_rate=1.5, message_weight=cap_weight),
+            ], 0.15],
+            ["video_academic", VIDEO_ACADEMIC_DATASETS, 0.2],
+            ["image_academic", IMAGE_ACADEMIC_DATASETS, 0.25],
+            ["tracking", track_tasks, 0.12],
+            ["video_pointing", video_pointing_tasks, 0.11],
+            ["image_pointing", [
+                WeightedDataset("pixmo_multi_points", root_size_factor=200000,
+                                message_weight=point_weight),
+                WeightedDataset("pixmo_points_train", message_weight=point_weight, override_p_high_res=pointing_high_res),
+                WeightedDataset("pixmo_count_train", message_weight=point_weight, override_p_high_res=pointing_high_res),
+                WeightedDataset("pixmo_points_high_freq_train", message_weight=point_weight, override_p_high_res=pointing_high_res),
+                WeightedDataset("cosyn_point", message_weight=point_weight, override_p_high_res=pointing_high_res),
+            ], 0.07],
             ["nlp", ["tulu4"], 0.1 - hardcode_weight],
             ["hardcodes", ["molmo2_hardcodes"], hardcode_weight]
         ]

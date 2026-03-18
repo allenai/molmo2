@@ -252,6 +252,8 @@ def load_model_and_optim_state(
             model.frame_selection_score_scaler.reset_parameters()
         state_dict = _prepare_state_dict(model, optim, process_group=process_group)
 
+    if key_mapping is None:
+        key_mapping = model.get_legacy_key_mapping()
     if key_mapping is not None:
         for current_key, original_key in key_mapping.items():
             if f"model.{original_key}" not in metadata.state_dict_metadata:

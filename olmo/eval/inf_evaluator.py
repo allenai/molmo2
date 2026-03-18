@@ -21,7 +21,7 @@ from .evaluators import (
     TomatoEval, TemporalBenchEval, Dream1KCaptionEval, MMEVideoOCREval, VideoHallucerEval,
     MMIUEval, LVBenchEval, MulSetEval, Ego3dBenchEval, VSIBenchEval,
     VideoObjectTrackingEval, VixMoPointCountEval, VixMoPointEval,
-    PointBenchEval
+    PointBenchEval, ScreenSpotProEvaluator, ScreenSpotEvaluator, OsWorldGEvaluator
 )
 from .open_ended_qa_eval import OpenQaEvaluator
 from ..config import BaseConfig
@@ -242,6 +242,9 @@ class EvaluatorConfig(BaseConfig):
     mulset_eval: bool = False
     ego3d_bench_eval: bool = False
     vsi_bench_eval: bool = False
+    os_worldg_evaluation: bool = False
+    screen_spot_evaluator: bool = False
+    screen_spot_pro_evaluator: bool = False
 
     def build(self, default_save_dir=None) -> InfEvaluator:
         evaluators = []
@@ -320,6 +323,12 @@ class EvaluatorConfig(BaseConfig):
             evaluators.append(VixMoPointCountEval(self.num_wandb_examples))
         if self.vixmo_point_eval:
             evaluators.append(VixMoPointEval(self.num_wandb_examples))
+        elif self.os_worldg_evaluation:
+            evaluators.append(OsWorldGEvaluator())
+        elif self.screen_spot_evaluator:
+            evaluators.append(ScreenSpotEvaluator())
+        elif self.screen_spot_pro_evaluator:
+            evaluators.append(ScreenSpotProEvaluator())
         else:
             pass
         return InfEvaluator(evaluators)
@@ -384,8 +393,6 @@ class InfDatasetEvaluator:
                             converted[k] = v[i].tolist()
                     batch_metadata.append(converted)
             batch_inference = move_to_device(batch, device)
-            # batch_str = " ".join(f"{k}={batch_inference[k].shape}" for k in sorted(batch_inference))
-            # log.warning(f"{get_global_rank()}: {eval_step}/{total_steps} {batch_str}. Meta={batch_metadata}")
             with torch.inference_mode():
                 with torch.autocast("cuda", enabled=True, dtype=autocast_precision):
                     olmo_gen_output = model.generate(
@@ -397,12 +404,18 @@ class InfDatasetEvaluator:
                     )
             input_tokens = olmo_gen_output.token_ids[:, 0].detach().cpu().numpy()
             prompt_tokens = batch_inference["input_ids"].detach().cpu().numpy()
+            prediction_text = [tok.decode(x[x >= 0]) for x in input_tokens]
             pred = {
                 "predictions": input_tokens, # beam size of 1
                 "prompts": prompt_tokens,
-                "predictions_text": [tok.decode(x[x >= 0]) for x in input_tokens],
+                "predictions_text": prediction_text,
                 "prompts_text": [tok.decode(x[x >= 0]) for x in prompt_tokens],
             }
+            if olmo_gen_output.token_target_ids is not None:
+                points = []
+                for text, point_indices, metadata in zip(prediction_text, olmo_gen_output.token_target_ids, batch_metadata):
+                    points.append(model.config.token_ids_to_coordinates(text, point_indices, metadata))
+                pred["points"] = points
 
             valid_ixs = [i for i, md in enumerate(batch_metadata) if md.get("valid", True)]
             all_metadata += [batch_metadata[i] for i in valid_ixs]

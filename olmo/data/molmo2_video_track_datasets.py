@@ -163,7 +163,7 @@ class Molmo2VideoTrackInstruction(TrackingDataset):
     def _get_video_dir_for_source(cls, source):
         video_source_downloader = get_video_source([source])[source]
         return video_source_downloader._get_video_dir('train')
-    
+
     @classmethod
     def download(cls, n_procs=1, sources=None):
         """Download HF annotations and create videos for each source.
@@ -280,7 +280,7 @@ class Molmo2VideoTrack(TrackingDataset):
     def _get_video_dir_for_source(cls, source):
         video_source_downloader = get_video_source([source])[source]
         return video_source_downloader._get_video_dir('train')
-    
+
     @classmethod
     def download(cls, n_procs=1, sources=None):
         """Download HF annotations and create videos for each source.
@@ -334,7 +334,7 @@ class Molmo2VideoTrack(TrackingDataset):
 
     def __len__(self):
         return len(self.data)
-    
+
     def _create_message_list(self, ex):
         """Convert HF row to message_list format matching TrackingDataset."""
         style = self._get_style()
@@ -517,7 +517,7 @@ class Molmo2VideoTrackEval(Molmo2VideoTrack):
         self.data_lookup = {} # example_id -> index for get_by_example_id
         self.configs = configs
         self.data = self.load()
-    
+
     def load(self):
         data = _load_hf_dataset(self.HF_SOURCE, 'test', local_name=self.LOCAL_NAME)
 
@@ -529,11 +529,11 @@ class Molmo2VideoTrackEval(Molmo2VideoTrack):
             pre = len(data)
             data = data.filter(lambda src: src in sources, input_columns="video_dataset")
             log.info(f"Filtered to sources {sources} for configs {self.configs}: {len(data)}/{pre} examples remaining")
-            
+
         self.data_lookup = {ex_id: i for i, ex_id in enumerate(data["id"])}
 
         return data
-    
+
     def get(self, idx, rng):
         ex = self.data[idx]
         video_fps = ex['fps']
@@ -667,7 +667,7 @@ class Molmo2TrackVideoSource:
                     full_video_items.append({
                         'frames_dir': frames_dir, 'output_path': full_video_path, 'fps': fps,
                     })
-            
+
             # Stage 2: clip from full video -> videos/ dir
             clip_output = join(video_dir, f"{clip_name}.mp4")
             if not exists(clip_output):
@@ -891,7 +891,7 @@ class DanceTrackSource(Molmo2TrackVideoSource):
             return ['test1', 'test2'], join(cls.VIDEO_HOME, 'test')
         else:
             raise ValueError(f"Unknown split: {split}")
-    
+
     @classmethod
     def _get_video_dir(cls, split):
         """Final loading directory — contains clips (or symlinked full videos)."""
@@ -960,7 +960,7 @@ class DanceTrackSource(Molmo2TrackVideoSource):
                 log.info(f"[{cls.SOURCE_NAME}] Merged {moved} items from {fname} into {frames_root}")
                 shutil.rmtree(extract_dir, ignore_errors=True)
 
-    
+
 class SportsMOTSource(Molmo2TrackVideoSource):
     SOURCE_NAME = 'sportsmot'
     VIDEO_HOME = join(VIDEO_TRACK_DATA_HOME, 'SportsMOT')
@@ -1024,7 +1024,7 @@ class PersonPath22Source(Molmo2TrackVideoSource):
     @classmethod
     def _get_full_video_dir(cls, split):
         return join(cls.VIDEO_HOME, 'full_videos')
-    
+
     @classmethod
     def _build_video_work_items(cls, clip_map, split):
         """Build work items for full videos and clips from clip_map.
@@ -1069,7 +1069,7 @@ class PersonPath22Source(Molmo2TrackVideoSource):
 
         return full_video_items, clip_items
 
-        
+
 class SAVSource(Molmo2TrackVideoSource):
     """Segment Anything Video. Train: extract mp4->frames->reencode at 6fps. Test: extract tar->frames->encode."""
     SOURCE_NAME = 'sav'
@@ -1241,7 +1241,7 @@ class MOSEv2Source(Molmo2TrackVideoSource):
                 ["cat"] + tar_parts,
                 stdout=open(tar_path, 'wb'),
                 check=True,
-            )
+                )
 
         # Extract train.tar.gz → train/JPEGImages/
         if exists(tar_path):
@@ -1274,7 +1274,7 @@ class VIPSegSource(Molmo2TrackVideoSource):
     @classmethod
     def _get_frames_dir(cls, split, video_name):
         return join(cls.VIDEO_HOME, 'VIPSeg_720P', 'images', video_name)
-    
+
     @classmethod
     def _prepare_annotation_dir(cls, n_procs=1, split='train'):
         frames_root = join(cls.VIDEO_HOME, 'VIPSeg_720P', 'images')
@@ -1381,7 +1381,7 @@ class SoccerNetSource(Molmo2TrackVideoSource):
         if not exists(annotation_dir):
             log.warning(f"[{cls.SOURCE_NAME}] Annotation preparation requires manual download due to NDA. {cls.DOWNLOAD_NOTE}")
             raise NotImplementedError(f"Manual download required for {cls.SOURCE_NAME}. {cls.DOWNLOAD_NOTE}")
-        
+
         # Unzip tracking.zip
         if not exists(join(annotation_dir, split)):
             split_dir = join(annotation_dir, split)
@@ -1409,7 +1409,7 @@ class TeamTrackSource(Molmo2TrackVideoSource):
             cls.VIDEO_URL,
             expected_dir="teamtrack",
         )
-    
+
     @classmethod
     def _build_video_work_items(cls, clip_map, split):
         """Build work items for full videos and clips from clip_map.
@@ -1520,7 +1520,7 @@ class BDD100KSource(Molmo2TrackVideoSource):
             cls.VIDEO_URL,
             expected_dir="bdd100k",
         )
-    
+
     @classmethod
     def _build_video_work_items(cls, clip_map, split):
         """Build work items for full videos and clips from clip_map.
@@ -1580,7 +1580,7 @@ class UAVDTSource(Molmo2TrackVideoSource):
     @classmethod
     def _get_video_dir(cls, split):
         return join(cls.VIDEO_HOME, 'videos')
-    
+
     @classmethod
     def _get_full_video_dir(cls, split):
         return join(cls.VIDEO_HOME, 'full_videos')
@@ -1697,7 +1697,7 @@ class SeaDronesSeeSource(Molmo2TrackVideoSource):
 
         log.info(f"[{cls.SOURCE_NAME}] Created {len(vid_frames)} video frame directories in {frames_root}")
         log.info(f"[{cls.SOURCE_NAME}] Video name mapping: {vid_names}")
-    
+
     @classmethod
     def _build_video_work_items(cls, clip_map, split):
         """Build work items for full videos and clips from clip_map.
@@ -1754,6 +1754,252 @@ class SeaDronesSeeSource(Molmo2TrackVideoSource):
 
         return full_video_items, clip_items
 
+
+class MolmoPointTrackAny(TrackingDataset):
+    """Point tracking dataset over natural videos from YouTube and MammalNet.
+
+    Loads annotations from allenai/MolmoPoint-TrackAny on HuggingFace. Each example
+    contains a natural-language expression, per-frame point trajectories, and video
+    metadata. Two sampling-FPS variants (1 and 2) are concatenated into a single
+    train split.
+
+    Video sources (column ``video_source``):
+        - ``"youtube"``: hosted on GCS (requester-pays), use the URL mapping JSON
+          ``molmo_point_track_youtube_id_to_urls_mapping.json`` to download.
+        - ``"MammalNet"``: auto-downloaded from mammalnet.s3.amazonaws.com.
+
+    Expected directory layout under VIDEO_HOME::
+
+        {VIDEO_HOME}/youtube-cc/{video_name}.{ext}   (ext may be .mp4, .webm, .mkv, etc.)
+        {VIDEO_HOME}/MammalNet/trimmed_video/{video_name}.mp4
+
+    See also: scripts/molmopoint_trackany_readme_draft.md (HuggingFace dataset card)
+    """
+    HF_SOURCE = "allenai/MolmoPoint-TrackAny"
+    DATASET_NAME = "molmopoint-trackany"
+    VIDEO_HOME = join(VIDEO_DATA_HOME) # shares same video as Molmo2VideoPoint, hence VIDEO_DATA_HOME instead of VIDEO_TRACK_DATA_HOME
+    TASKS = ["track"]
+    SPLIT_MAP = {
+        "train": "train",
+    }
+    MANUAL_DOWNLOAD_INSTRUCTION = """
+This dataset has two video sources:
+
+1. YouTube videos (video_source="youtube"):
+   Follow the Molmo2-VideoPoint download pattern using GCS requester-pays.
+   Details available in: https://huggingface.co/datasets/allenai/MolmoPoint-TrackAny#video-download
+   a) Get the URL mapping: molmo_point_track_youtube_id_to_urls_mapping.json
+   b) Set up a GCS project with billing: https://cloud.google.com/storage/docs/requester-pays
+   c) Download videos and place them at: {VIDEO_DATA_HOME}/youtube-cc/{video_path}
+   Alternatively, bulk-copy from our bucket:
+      gsutil -u YOUR_PROJECT cp -r gs://molmo2_videos/track_synthetic/* gs://your-bucket/
+
+2. MammalNet videos (video_source="MammalNet"):
+   Auto-downloaded during MolmoPointTrackAny.download() from:
+      https://mammalnet.s3.amazonaws.com/trimmed_video.tar.gz
+   Extracted to: {VIDEO_DATA_HOME}/MammalNet/
+"""
+
+    @classmethod
+    def _resolve_video_path(cls, video_id, video_path, video_source):
+        """Look up the video path from the pre-built cache.
+
+        Args:
+            video_id: the `video` column value from HF (video_id, no extension)
+            video_source: "youtube" or "MammalNet"
+
+        Returns the absolute path if found, None otherwise.
+        """
+        if video_source in ("MammalNet", "mammalnet"):
+            return join(cls.VIDEO_HOME, "MammalNet", "trimmed_video", f"{video_id}.mp4")
+
+        # YouTube: look up from URL mapping cache
+        return join(cls.VIDEO_HOME, "youtube-cc", video_path)
+
+    @classmethod
+    def _load_all_dataset_and_fps(cls, overwrite_cache=True):
+        """Load/cache annotations across all tasks/splits, return {(data_split, video_name): fps}.
+
+        video_name is the video identifier without file extension.
+        overwrite_cache: re-download from HF even if local cache exists (pass True from download()).
+        """
+        video_fps = {}
+        seen = set()
+        for task in cls.TASKS:
+            for data_split in set(cls.SPLIT_MAP.values()):
+                if (task, data_split) in seen:
+                    continue
+                seen.add((task, data_split))
+                try:
+                    local_dir = cls._get_local_dir(task, data_split)
+                    config = cls._get_hf_config(task)
+                    ds = _load_hf_dataset(cls.HF_SOURCE, data_split, local_name=local_dir,
+                                          config=config, overwrite_cache=overwrite_cache)
+                    ds = ds.select_columns(["video", "video_path", "fps", "video_source"])
+                except Exception as e:
+                    log.warning(f"Could not load {cls.HF_SOURCE}/{config}/{data_split}: {e}")
+                    continue
+                for ex in ds:
+                    key = (data_split, ex['video'], ex['video_path'], ex['video_source'])
+                    fps = ex['fps']
+                    if key in video_fps:
+                        assert video_fps[key] == fps, f"Conflicting FPS for {key}: {video_fps[key]} vs {fps}"
+                    video_fps[key] = fps
+        return video_fps
+
+
+    @classmethod
+    def download(cls, n_procs=1):
+        """Generic download pipeline. Override _prepare_annotation_dir and
+        _get_frames_dir to customize; override download() entirely for
+        non-standard flows (e.g. pre-existing videos, chunked downloads)."""
+        # Step 1: What videos do we need?
+        video_fps_map = cls._load_all_dataset_and_fps()
+
+        # Step 2: Which are missing?
+        missing = cls._check_videos(video_fps_map)
+        if missing:
+            log.info(f"[{cls.DATASET_NAME}] {len(missing)}/{len(video_fps_map)} videos missing.")
+
+            # Step 3: Download videos from source(s)
+            yt_dir = join(cls.VIDEO_HOME, 'youtube-cc')
+            if not exists(yt_dir):
+                log.info(f"Not found {yt_dir}. Assuming youtube videos not downloaded yet")
+                log.info(f"Please follow manual download instruction to download videos to {cls.VIDEO_HOME}. {cls.MANUAL_DOWNLOAD_INSTRUCTION}")
+            else:
+                log.info(f"Found existing YouTube videos at {yt_dir}, skipping YouTube download.")
+
+            mammal_dir = join(cls.VIDEO_HOME, 'MammalNet', )
+            if not exists(join(mammal_dir, "trimmed_video")):
+                log.info(f"Downloading MammalNet trimmed videos to {mammal_dir}...")
+
+                # note: original repo has typo as "trimmed_videos.tar.gz" but actual file is "trimmed_video.tar.gz"
+
+                tar_path = join(mammal_dir, "trimmed_video.tar.gz")
+                if not exists(tar_path):
+                    maybe_download_file(
+                        "https://mammalnet.s3.amazonaws.com/trimmed_video.tar.gz",
+                        tar_path,
+                    )
+                else:
+                    log.info(f"Found existing tar file at {tar_path}, skipping download.")
+
+                log.info(f"Extracting MammalNet trimmed videos...")
+                subprocess.run(["tar", "-xzf", tar_path, "-C", mammal_dir,
+                                "--checkpoint=10000", "--checkpoint-action=echo=#%u files extracted"], check=True)
+
+            cls._check_videos(video_fps_map)
+
+    @classmethod
+    def _check_videos(cls, video_fps):
+        """Check that all videos referenced in annotations exist on disk.
+
+        Uses _resolve_video_path to handle varying extensions for YouTube videos.
+        Builds the path cache from the URL mapping JSON if not already built.
+        """
+        missing = []
+        for (data_split, video_id, video_path, video_source), fps in video_fps.items():
+            path = cls._resolve_video_path(video_id, video_path, video_source)
+            if path is None or not exists(path):
+                missing.append(video_path)
+        if missing:
+            log.warning(f"[{cls.DATASET_NAME}] {len(missing)} missing videos, e.g.: {missing[:20]}")
+        else:
+            log.info(f"[{cls.DATASET_NAME}] ✅ All {len(video_fps)} unique instances verified")
+        return missing
+
+    def get(self, idx, rng):
+        ex = self.data[idx]
+        video_fps = ex["fps"]
+        video_source = ex["video_source"]
+
+        video_path = self._resolve_video_path(ex['video'], ex['video_path'], video_source)
+        message_list = self._create_message_list(ex)
+
+        metadata = {
+            'example_id': ex['id'],
+            'task': self.task,
+            'expression': ex['expression'],
+            'w': ex['width'],
+            'h': ex['height'],
+            'video_fps': video_fps,
+            'video': ex['video'],
+            'video_source': video_source,
+        }
+
+        if self.use_fps_sampling:
+            metadata['sampler_overrides'] = {
+                'frame_sample_mode': 'fps',
+                'candidate_sampling_fps': self._get_candidate_fps(video_fps),
+                'min_fps': self.sampling_fps or ex['sampling_fps'],
+            }
+
+        return {
+            'video': video_path,
+            'message_list': message_list,
+            'sampling_fps': ex['sampling_fps'],
+            'metadata': metadata,
+        }
+
+
+class MolmoPointTrackSyn(TrackingDataset):
+    """Synthetic point tracking dataset.
+
+    Loads annotations from allenai/MolmoPoint-TrackSyn on HuggingFace.
+    Videos are stored as synthetic_tracks.tar in the same HF repo.
+
+    After extraction, videos live at::
+
+        {VIDEO_HOME}/static-camera/{run_dir}/{video_file}.mp4
+
+    The HF ``video`` column stores the relative path (no extension), so
+    the base class ``get()`` resolves via ``ex['video'] + '.mp4'``.
+    """
+    HF_SOURCE = "allenai/MolmoPoint-TrackSyn"
+    DATASET_NAME = "molmopoint-tracksyn"
+    VIDEO_HOME = join(VIDEO_TRACK_DATA_HOME, 'MolmoPoint-TrackSyn')
+    VIDEO_TAR = "synthetic_tracks.tar"
+    TASKS = ["track"]
+    SPLIT_MAP = {
+        "train": "train",
+    }
+
+    @classmethod
+    def _get_video_dir(cls, data_split):
+        """Videos are directly under VIDEO_HOME (no per-split subdirs)."""
+        return cls.VIDEO_HOME
+
+    @classmethod
+    def download(cls, n_procs=1, sources=None, configs=None):
+        """Download annotations and synthetic videos from HuggingFace."""
+        video_fps_map = cls._load_all_dataset_and_fps()
+
+        missing = cls._check_videos(video_fps_map)
+        if missing:
+            log.info(f"[{cls.DATASET_NAME}] {len(missing)}/{len(video_fps_map)} videos missing.")
+
+            tar_path = join(cls.VIDEO_HOME, cls.VIDEO_TAR)
+            if not exists(tar_path):
+                log.info(f"[{cls.DATASET_NAME}] Downloading {cls.VIDEO_TAR} from {cls.HF_SOURCE}...")
+                snapshot_download(
+                    repo_id=cls.HF_SOURCE,
+                    allow_patterns=[cls.VIDEO_TAR],
+                    repo_type="dataset",
+                    local_dir=cls.VIDEO_HOME,
+                    local_dir_use_symlinks=False,
+                )
+
+            log.info(f"[{cls.DATASET_NAME}] Extracting {tar_path}...")
+            subprocess.run(
+                ["tar", "-xf", tar_path, "-C", cls.VIDEO_HOME,
+                 "--checkpoint=1000", "--checkpoint-action=echo=#%u files extracted"],
+                check=True,
+            )
+
+            cls._check_videos(video_fps_map)
+
+
+
 def get_video_source(sources=None) -> Dict[str, Molmo2TrackVideoSource]:
     """Get video source downloader classes by name.
 
@@ -1779,6 +2025,9 @@ def get_video_source(sources=None) -> Dict[str, Molmo2TrackVideoSource]:
         'bdd100k': BDD100KSource,
         'uavdt': UAVDTSource,
         'seadrones': SeaDronesSeeSource,
+
+        'youtube': MolmoPointTrackAny,
+        'synthetic': MolmoPointTrackSyn,
     }
     if sources is None:
         return all_sources
@@ -1795,6 +2044,8 @@ def get_video_source(sources=None) -> Dict[str, Molmo2TrackVideoSource]:
 DATASET_CLASSES = {
     'train': Molmo2VideoTrack,
     'eval': Molmo2VideoTrackEval,
+    'molmopoint-trackany': MolmoPointTrackAny,
+    'molmopoint-tracksyn': MolmoPointTrackSyn,
 }
 
 
@@ -1818,18 +2069,18 @@ def download_video_sources(dataset='train', sources=None, configs=None, n_procs=
     """Download and create videos for specified sources.
 
     Args:
-        dataset: 'train' or 'eval'
+        dataset: 'train', 'eval', 'molmopoint-trackany', or 'molmopoint-tracksyn'
         sources: list of source names (e.g. ['mose', 'dancetrack']), or None for all.
         configs: for eval dataset, config names to resolve to sources.
         n_procs: num workers for parallel video creation.
     """
-    
+
     if dataset == 'train':
         log.info("Downloading video sources for training dataset...")
         cls = Molmo2VideoTrackInstruction
         cls.download(n_procs=n_procs, sources=sources)
-    
-    else:
+
+    elif dataset == 'eval':
         log.info("Downloading video sources for eval dataset...")
         cls = Molmo2VideoTrackEval
         # For eval, resolve configs -> sources if no explicit sources given
@@ -1837,14 +2088,31 @@ def download_video_sources(dataset='train', sources=None, configs=None, n_procs=
             sources = _resolve_sources_from_configs(cls, configs)
         cls.download(n_procs=n_procs, sources=sources, configs=configs)
 
+    elif dataset == 'molmopoint-trackany':
+        log.info("Downloading MolmoPoint-TrackAny dataset...")
+        MolmoPointTrackAny.download(n_procs=n_procs)
+
+    elif dataset == 'molmopoint-tracksyn':
+        log.info("Downloading MolmoPoint-TrackSyn dataset...")
+        MolmoPointTrackSyn.download(n_procs=n_procs)
+
 
 def list_sources(dataset='train'):
     """Print available video source names."""
+    if dataset in ('molmopoint-trackany', 'molmopoint-tracksyn'):
+        cls = DATASET_CLASSES[dataset]
+        print(f"  {cls.__name__}:")
+        print(f"    HF source: {cls.HF_SOURCE}")
+        print(f"    Video home: {cls.VIDEO_HOME}")
+        if hasattr(cls, 'MANUAL_DOWNLOAD_INSTRUCTION'):
+            print(f"    Download instructions:{cls.MANUAL_DOWNLOAD_INSTRUCTION}")
+        return
+
     if dataset == 'train':
         cls = Molmo2VideoTrackInstruction
     else:
         cls = Molmo2VideoTrackEval
-    
+
     if hasattr(cls, 'CONFIGS'):
         print(f"  Configs ({cls.__name__}):")
         for config, config_sources in cls.CONFIGS.items():
@@ -1879,6 +2147,8 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
+    DATASET_CHOICES = ["train", "eval", "molmopoint-trackany", "molmopoint-tracksyn"]
+
     parser = argparse.ArgumentParser(
         description="Download Molmo2-VideoTrack annotations and/or video sources",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1900,9 +2170,18 @@ Examples:
   # Download eval dataset for specific configs
   python -m olmo.data.molmo2_video_track_datasets --download --dataset eval --configs misc animal
 
+  # Download MolmoPoint-TrackAny (YouTube + MammalNet)
+  python -m olmo.data.molmo2_video_track_datasets --download --dataset molmopoint-trackany
+
+  # Download MolmoPoint-TrackSyn (synthetic videos)
+  python -m olmo.data.molmo2_video_track_datasets --download --dataset molmopoint-tracksyn
+
+  # List info for MolmoPoint-TrackAny
+  python -m olmo.data.molmo2_video_track_datasets --list --dataset molmopoint-trackany
+
 """
     )
-    parser.add_argument("--dataset", choices=["train", "eval"], default="train",
+    parser.add_argument("--dataset", choices=DATASET_CHOICES, default="train",
                         help="Which dataset to operate on (default: train).")
     parser.add_argument("--configs", nargs="+", default=None,
                         help="Eval config(s) to download (e.g. misc animal). Only used with --dataset eval.")
@@ -1924,14 +2203,17 @@ Examples:
 
     if args.download:
         download_video_sources(dataset=args.dataset, sources=args.sources,
-                        configs=args.configs, n_procs=args.n_procs)
+                               configs=args.configs, n_procs=args.n_procs)
     else:
         # Load datasets
         log.info("Loading datasets...")
         if args.dataset == 'train':
             dataset = Molmo2VideoTrack(split='train', task='track', sources=args.sources)
-        else:            
+        elif args.dataset == 'eval':
             dataset = Molmo2VideoTrackEval(split='test', task='track', sampling_fps=1, configs=args.configs)
+        elif args.dataset in ('molmopoint-trackany', 'molmopoint-tracksyn'):
+            cls = DATASET_CLASSES[args.dataset]
+            dataset = cls(split='train', task='track')
         log.info(f"Loaded {len(dataset)} videos for {args.dataset} dataset.")
         for ds in tqdm(dataset, desc="Loading dataset", total=len(dataset)):
             pass

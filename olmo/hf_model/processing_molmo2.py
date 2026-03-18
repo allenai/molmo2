@@ -11,7 +11,7 @@ from transformers.video_utils import VideoInput
 from transformers.processing_utils import (
     Unpack,
     ProcessingKwargs,
-    ProcessorMixin,
+    ProcessorMixin, AllKwargsForChatTemplate,
 )
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.tokenization_utils_base import TextInput, PreTokenizedInput
@@ -88,6 +88,7 @@ class Molmo2Processor(ProcessorMixin):
         use_single_crop_start_token: Optional[bool] = True,
         video_use_col_tokens: Optional[bool] = False,
         use_frame_special_tokens: Optional[bool] = True,
+        use_low_res_token_for_global_crops: bool = False,
         **kwargs
     ) -> None:
         super().__init__(
@@ -101,13 +102,14 @@ class Molmo2Processor(ProcessorMixin):
             video_use_col_tokens=video_use_col_tokens,
             use_frame_special_tokens=use_frame_special_tokens,
         )
-
         self.image_placeholder_token = IMAGE_PROMPT
         self.video_placeholder_token = VIDEO_PROMPT
         self.image_token_ids = [
             tokenizer.convert_tokens_to_ids(token)
             for token in IMAGE_TOKENS
         ]
+        self.use_low_res_token_for_global_crops = use_low_res_token_for_global_crops
+        self._patch_metadata = None
 
     def get_image_tokens(self, image_grid: np.ndarray):
         resized_h, resized_w, height, width = image_grid
@@ -119,7 +121,10 @@ class Molmo2Processor(ProcessorMixin):
             np.tile(per_row, [height]),
             [IM_END_TOKEN],
         ]
-        per_row = np.full(resized_w, IMAGE_PATCH_TOKEN)
+        if self.use_low_res_token_for_global_crops:
+            per_row = np.full(resized_w, IMAGE_LOW_RES_TOKEN)
+        else:
+            per_row = np.full(resized_w, IMAGE_PATCH_TOKEN)
         use_single_crop_col_tokens = (
             self.image_use_col_tokens
             if self.use_single_crop_col_tokens is None
@@ -247,6 +252,8 @@ class Molmo2Processor(ProcessorMixin):
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: ImageInput = None,
         videos: VideoInput = None,
+        return_pointing_metadata: bool = False,
+        use_low_res_token_for_global_crops: bool = False,
         **kwargs: Unpack[Molmo2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -287,22 +294,37 @@ class Molmo2Processor(ProcessorMixin):
               Returned when `videos` is not `None`.
             - **video_grids** -- Grids of videos. Returned when `videos` is not `None`.
         """
-
         output_kwargs = self._merge_kwargs(
             Molmo2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
+        patch_metadata = {}
         if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"],
+                                                return_pointing_metadata=return_pointing_metadata)
+            if return_pointing_metadata:
+                patch_metadata["token_pooling"] = image_inputs.pop("image_token_pooling_np")
+                patch_metadata["subpatch_mapping"] = image_inputs.pop("subpatch_mapping")
+                patch_metadata["image_sizes"] = image_inputs.pop("image_sizes")
             image_grids = image_inputs["image_grids"]
         else:
             image_inputs = {}
             image_grids = None
 
         if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+            videos_inputs = self.video_processor(
+                videos=videos, **output_kwargs["videos_kwargs"],
+                return_pointing_metadata=return_pointing_metadata
+            )
+            if return_pointing_metadata:
+                assert len(videos_inputs['video_metadata']) == 1
+                vd_metadata = videos_inputs['video_metadata'][0]
+                patch_metadata["token_pooling"] = videos_inputs.pop("video_token_pooling_np")
+                patch_metadata["subpatch_mapping"] = videos_inputs.pop("subpatch_mapping")
+                patch_metadata["timestamps"] = vd_metadata.timestamps
+                patch_metadata["video_size"] = (vd_metadata.width, vd_metadata.height)
+
             video_grids = videos_inputs["video_grids"]
             # If user has not requested video metadata, pop it
             if "return_metadata" not in kwargs:
@@ -367,10 +389,13 @@ class Molmo2Processor(ProcessorMixin):
         text_inputs["input_ids"] = input_ids.tolist()
         text_inputs["attention_mask"] = attention_mask.tolist()
 
-        return BatchFeature(
+        features = BatchFeature(
             data={**text_inputs, **image_inputs, **videos_inputs},
             tensor_type=return_tensors,
         )
+        if return_pointing_metadata:
+            features["metadata"] = patch_metadata
+        return features
 
     def post_process_image_text_to_text(
         self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs

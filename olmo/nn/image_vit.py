@@ -126,7 +126,7 @@ def vit_activation_checkpoint_function(cfg: VitConfig):
 class ViTMultiHeadDotProductAttention(nn.Module):
     """MDPA for the image ViT"""
 
-    def __init__(self, config: VitConfig, use_bias: bool = True, input_dim=None, device=None):
+    def __init__(self, config: VitConfig, use_bias: bool = True, input_dim=None, out_dim=None, device=None):
         super().__init__()
         self.config = config
         self.use_bias = use_bias
@@ -159,11 +159,14 @@ class ViTMultiHeadDotProductAttention(nn.Module):
             bias=use_bias,
             device=device,
         )
-        self.wo = nn.Linear(
-            self.num_heads * self.head_dim,
-            self.embed_dim,
-            bias=use_bias,
-            device=device,
+        if out_dim == -1:
+            self.wo = None
+        else:
+            self.wo = nn.Linear(
+                self.num_heads * self.head_dim,
+                out_dim or self.embed_dim,
+                bias=use_bias,
+                device=device,
             )
         self.attention_dropout: Optional[nn.Dropout] = None
         if config.attention_dropout > 0:
@@ -184,12 +187,14 @@ class ViTMultiHeadDotProductAttention(nn.Module):
         nn.init.normal_(self.wq.weight, std=self.initializer_range)
         nn.init.normal_(self.wk.weight, std=self.initializer_range)
         nn.init.normal_(self.wv.weight, std=self.initializer_range)
-        nn.init.normal_(self.wo.weight, std=self.initializer_range)
+        if self.wo is not None:
+            nn.init.normal_(self.wo.weight, std=self.initializer_range)
         if self.use_bias:
             nn.init.constant_(self.wq.bias, 0)
             nn.init.constant_(self.wk.bias, 0)
             nn.init.constant_(self.wv.bias, 0)
-            nn.init.constant_(self.wo.bias, 0)
+            if self.wo is not None:
+                nn.init.constant_(self.wo.bias, 0)
 
     def _split_heads(self, hidden_states, num_heads) -> torch.Tensor:
         return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
@@ -256,7 +261,8 @@ class ViTMultiHeadDotProductAttention(nn.Module):
             raise NotImplementedError(self.config.attention_type)
         attn_output = attn_output.to(og_dtype)
         attn_output = self._merge_heads(attn_output)
-        attn_output = self.wo(attn_output)
+        if self.wo is not None:
+            attn_output = self.wo(attn_output)
         attn_output = self.residual_dropout(attn_output)
 
         return attn_output

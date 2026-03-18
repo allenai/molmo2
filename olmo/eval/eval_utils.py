@@ -198,6 +198,12 @@ def get_evaluator(name) -> EvaluatorConfig:
         return EvaluatorConfig(vixmo_point_count_eval=True)
     elif name == "vixmo_points_point_eval":
         return EvaluatorConfig(vixmo_point_eval=True)
+    elif name.startswith("screen_spot_v2"):
+        return EvaluatorConfig(screen_spot_evaluator=True)
+    elif name.startswith("os_worldg"):
+        return EvaluatorConfig(os_worldg_evaluation=True)
+    elif name.startswith("screen_spot_pro"):
+        return EvaluatorConfig(screen_spot_pro_evaluator=True)
     elif f"evaluator/{name}" in registry.list():
         return registry.make(f"evaluator/{name}")
     else:
@@ -226,6 +232,8 @@ def get_default_max_tokens(name):
         max_new_tokens = 256
     elif name.startswith("user_questions_for_elo"):
         max_new_tokens = 768  # Can have counts of 20+ so make sure there is room
+    elif name.startswith("screen_spot") or name.startswith("os_worldg"):
+        max_new_tokens = 128
     elif name == "point_bench":
         max_new_tokens = 256
     elif name in ["pointing_eval", "pointing_eval_v2", "pointing"]:

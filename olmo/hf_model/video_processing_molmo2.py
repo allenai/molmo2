@@ -826,7 +826,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     ) -> BatchFeature:
         validate_kwargs(
             captured_kwargs=kwargs.keys(),
-            valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
+            valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) +
+                                 ["return_tensors", "return_pointing_metadata"],
         )
 
         # Set default kwargs from self. This ensures that if a kwarg is not provided
@@ -867,6 +868,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         patch_size: Optional[int] = None,
         pooling_size: Optional[list[int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        return_pointing_metadata: bool = False,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -955,13 +957,20 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         pixel_values_videos = np.concatenate(batch_crops, 0)
         video_token_pooling = np.concatenate(batch_pooled_patches_idx, 0)
         
-        data =dict(
+        data = BatchFeature(dict(
             pixel_values_videos=pixel_values_videos,
             video_token_pooling=video_token_pooling,
             video_grids=video_grids,
-        )
-
-        return BatchFeature(data, tensor_type=return_tensors)
+        ), tensor_type=return_tensors)
+        if return_pointing_metadata:
+            t = pixel_values_videos.shape[0]
+            assert base_image_input_size[0] % self.patch_size == 0
+            assert base_image_input_size[1] % self.patch_size == 0
+            crop_w = base_image_input_size[0] // self.patch_size
+            crop_h = base_image_input_size[1] // self.patch_size
+            data["subpatch_mapping"] = np.arange(t*crop_w*crop_h).reshape([t, crop_h, crop_w])
+            data["video_token_pooling_np"] = video_token_pooling
+        return data
 
 
 Molmo2VideoProcessor.register_for_auto_class()

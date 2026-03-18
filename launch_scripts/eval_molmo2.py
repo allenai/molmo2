@@ -13,6 +13,7 @@ from omegaconf import OmegaConf
 from olmo.eval.eval_utils import get_evaluation
 from olmo.models.molmo.molmo import MolmoConfig
 from olmo.models.molmo2.molmo2 import Molmo2Config
+from olmo.models.molmo_point.molmo_point import MolmoPointConfig
 from olmo.train.trainer_config import FSDPConfig, FSDPPrecision
 from olmo.models.model import FSDPWrapStrategy
 from olmo.util import (
@@ -60,7 +61,6 @@ VIDEO_POINTING = [
     "vixmo_points_count_clip_63s:val",
     "vixmo_points_point_eval:val",
     "mevis_point_track_per_frame_fps_6_sample_fps_1",
-    "vixmo_points_count:val",
 ]
 
 TEST_VIDEO_DATASETS = [
@@ -244,9 +244,9 @@ def main():
         model_cfg_path = resource_path(select_checkpoint(checkpoint_dir), "config.yaml")
 
         model_cfg = MolmoConfig.load(model_cfg_path, key="model", validate_paths=False)
-        if isinstance(model_cfg, Molmo2Config):
+        if isinstance(model_cfg, (Molmo2Config, MolmoPointConfig)):
             if model_cfg.mm_preprocessor.image is not None:
-                model_cfg.mm_preprocessor.image.max_crops = 24
+                model_cfg.mm_preprocessor.image.max_crops = max(model_cfg.mm_preprocessor.image.max_crops, 24)
                 model_cfg.mm_preprocessor.image.max_images = 20
         elif isinstance(model_cfg, MolmoConfig):
             model_cfg.mm_preprocessor.max_crops = 24

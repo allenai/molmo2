@@ -490,7 +490,7 @@ class LlmConfig(BaseConfig):
 
     max_sequence_length: int = 1024
     """
-    The maximum input sequence length supported by the model.
+    Size of the RoPE cache, must be > the max position id the model will see. 
     """
 
     max_position_embeddings: Optional[int] = None
@@ -600,6 +600,11 @@ class LlmConfig(BaseConfig):
     Tokenizer configuration.
     """
 
+    can_predict_extra_tokens: bool = False
+    """
+    Can the model output image special tokens
+    """
+
     init_path: Optional[str] = None
     """Path to initial the LLM with"""
 
@@ -706,12 +711,21 @@ class Llm(nn.Module):
                 config.embedding_size or config.vocab_size, config.d_model, device=device)
         self.activation_checkpointing_fn = None
         if not config.weight_tying:
-            self.ff_out = nn.Linear(
-                config.d_model,
-                config.embedding_size or config.vocab_size,
-                bias=config.include_bias,
-                device=device,
-            )
+            if config.can_predict_extra_tokens:
+                self.ff_out = ProjectWithExtra(
+                    config.d_model,
+                    config.embedding_size or config.vocab_size,
+                    config.additional_vocab_size,
+                    bias=config.include_bias,
+                    device=device,
+                    )
+            else:
+                self.ff_out = nn.Linear(
+                    config.d_model,
+                    config.embedding_size or config.vocab_size,
+                    bias=config.include_bias,
+                    device=device,
+                )
 
     def reset_parameters(self) -> None:
         if self.config.additional_vocab_size:
@@ -826,6 +840,21 @@ class Llm(nn.Module):
             raise NotImplementedError(self.config.compile)
 
     # No forward method since this is only used as part of a `Molmo` model
+
+
+class ProjectWithExtra(nn.Module):
+    def __init__(self, input_dim, output_dim, extra_dim, bias, device=None):
+        assert not bias
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros(output_dim, input_dim, device=device))
+        self.new_weight = nn.Parameter(torch.zeros(extra_dim, input_dim, device=device))
+
+    def reset_parameters(self):
+        nn.init.normal_(self.weight, std=0.02)
+        nn.init.normal_(self.new_weight, std=0.02)
+
+    def forward(self, x: torch.Tensor, logits=False, logits_with_new_embedding=False) -> torch.Tensor:
+        return F.linear(x, torch.cat([self.weight, self.new_weight], dim=0))
 
 
 class Embedding(nn.Module):

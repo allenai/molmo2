@@ -12,7 +12,7 @@ from typing import Optional, Tuple
 import numpy as np
 import datasets
 
-from olmo.data.dataset import DatasetBase, DATA_HOME, VIDEO_DATA_HOME
+from olmo.data.dataset import DatasetBase, DATA_HOME, VIDEO_DATA_HOME, Dataset
 from olmo.util import set_example_style
 
 
@@ -577,16 +577,18 @@ class Molmo2VideoPoint(DatasetBase):
             logging.info(f"Saved {len(rows_with_clips)} preprocessed rows to {preprocessed_path}")
 
     def __init__(self,
-            split: str,
-            mode: str = "point_count",
-            point_sort_by: str = "xy",
-            max_seconds: int = None,
-            multi_message_short_clips: bool = False,
-            min_points: int = None,
-            max_points: int = None,
-            use_clips_from_metadata: bool = True,
-            fps: int = 2
-        ):
+        split: str,
+        mode: str = "point_count",
+        point_sort_by: str = "xy",
+        max_seconds: int = None,
+        multi_message_short_clips: bool = False,
+        min_points: int = None,
+        max_points: int = None,
+        use_clips_from_metadata: bool = True,
+        fps: int = 2,
+        oversample: bool = False,
+        p_multi_turn: float = 0.2
+    ):
         self.mode = mode
         self.point_sort_by = point_sort_by
         self.max_seconds = max_seconds
@@ -595,7 +597,9 @@ class Molmo2VideoPoint(DatasetBase):
         self.max_points = max_points
         self.use_clips_from_metadata = use_clips_from_metadata
         self.fps = fps
+        self.oversample = oversample
         self.timestamp_step = 1.0 / self.fps
+        self.p_multi_turn = p_multi_turn
         if self.use_clips_from_metadata:
             self.max_seconds = 63 # Clips from metadata are pre-computed for max 63 seconds
         if self.multi_message_short_clips:
@@ -619,7 +623,7 @@ class Molmo2VideoPoint(DatasetBase):
             key = (video_path, clip_start, clip_end)
             grouped[key].append(row)
 
-        video2msgs = {}
+        video2msgs = defaultdict(list)
         video_durations = {}
         data = []
         invalid_cnt = 0
@@ -732,13 +736,23 @@ class Molmo2VideoPoint(DatasetBase):
 
                 msg["points"] = all_sorted_points
                 msg["timestamps"] = all_timestamps
-                msgs.append(msg)
 
-            video2msgs[video_path] = video2msgs.get(video_path, []) + msgs
+                if self.oversample:
+                    n_points = sum(len(x) for x in all_sorted_points)
+                    if n_points <= 5:
+                        oversample = 1
+                    elif n_points <= 25:
+                        oversample = 2
+                    else:
+                        oversample = 4
+                    for k in range(oversample):
+                        video2msgs[(video_path, k)].append(msg)
+                else:
+                    video2msgs[(video_path, 0)].append(msg)
 
         if self.multi_message_short_clips:
             n_multi_turn = 0
-            for video_path, msgs in video2msgs.items():
+            for (video_path, _), msgs in video2msgs.items():
                 duration = video_durations[video_path]
                 if duration <= self.max_seconds and len(msgs) > 1:
                     # Normalize clip times: for short videos, all messages should
@@ -746,9 +760,6 @@ class Molmo2VideoPoint(DatasetBase):
                     # when the same video appears in multiple groups with different
                     # video_duration values due to float precision or data inconsistency.
                     start, end = 0.0, duration
-                    for msg in msgs:
-                        msg["clip_start_time"] = start
-                        msg["clip_end_time"] = end
                     n_multi_turn += 1
                     data.append(dict(
                         message_list=msgs,
@@ -760,16 +771,26 @@ class Molmo2VideoPoint(DatasetBase):
                     ))
                 else:
                     for msg in msgs:
-                        msg.update({"video": video_path})
+                        if "clip_start_time" in msg:
+                            msg["metadata"] = dict(
+                                clip_start_time=msg["clip_start_time"],
+                                clip_end_time=msg["clip_end_time"]
+                            )
+                        msg["video"] = video_path
                         data.append(msg)
             logging.info(f"Have {n_multi_turn} multi-turn video pointing messages")
         elif self.max_seconds > 0:
-            for video_path, msgs in video2msgs.items():
+            for (video_path, _), msgs in video2msgs.items():
                 for msg in msgs:
-                    msg.update({"video": video_path})
+                    if "clip_start_time" in msg:
+                        msg["metadata"] = dict(
+                            clip_start_time=msg["clip_start_time"],
+                            clip_end_time=msg["clip_end_time"]
+                        )
+                    msg["video"] = video_path
                     data.append(msg)
         else:
-            for video_path, msgs in video2msgs.items():
+            for (video_path, _), msgs in video2msgs.items():
                 data.append({
                     "video": video_path,
                     "message_list": msgs,
@@ -797,7 +818,7 @@ class Molmo2VideoPoint(DatasetBase):
                     del message["question"]
                 with_style.append(dict(message, style=style))
             assert len(with_style) > 0
-            if rng.random() < 0.5:
+            if rng.random() < self.p_multi_turn:
                 example["multi_turn_messages"] = with_style
             else:
                 example["message_list"] = with_style
@@ -1075,3 +1096,48 @@ class Molmo2SynCaptionsSubtitleQA(DatasetBase):
     def get(self, idx, rng):
         return self.data[idx]
 
+
+class Molmo2SyntheticPoint(Dataset):
+
+    @classmethod
+    def download(cls, n_procs=None):
+        (datasets.load_dataset_builder("allenai/MolmoPoint-Synthetic")
+         .download_and_prepare(num_proc=n_procs))
+
+    def __init__(self, split, keep_in_memory=False,
+                 p_intent=0.8, use_name_as_label=False):
+        all_parts = []
+        for part in ["benchmark", "desktop", "mobile", "web"]:
+            all_parts.append(datasets.load_dataset("allenai/MolmoPoint-Synthetic", part, split=split, keep_in_memory=keep_in_memory))
+        self.data = datasets.concatenate_datasets(all_parts)
+        self.p_intent = p_intent
+        self.use_name_as_label = use_name_as_label
+
+    def __len__(self):
+        return len(self.data)
+
+    def get(self, item, rng):
+        ex = self.data[item]
+        message_list = []
+        for annotation in ex["annotation"]:
+            msg = dict(
+                points=np.array([annotation["x_center"], annotation["y_center"]])[None, :],
+                style="pointing"
+            )
+            name = annotation["name"]
+            if len(annotation["intent"]) > 0 and (not name or rng.random() < self.p_intent):
+                if name and self.use_name_as_label:
+                    msg["label_cased"] = annotation["name"]
+                msg["question"] = rng.choice(annotation["intent"])
+            elif name:
+                # Use the point template
+                msg["label_cased"] = annotation["name"]
+            else:
+                continue
+            message_list.append(msg)
+        assert len(message_list) > 0
+        return dict(
+            image=ex["image"],
+            message_list=message_list,
+            metadata=dict(example_id=ex["id"])
+        )

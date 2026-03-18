@@ -401,6 +401,53 @@ class ImagePreprocessor:
             resized_mask = None
         return resized, resized_mask, resize_idx
 
+    def build_vit_patch_mapping(self, original_image_w, original_image_h, max_crops, overlap_margins):
+        base_image_input_size = self.base_image_input_size
+        image_patch_size = self.image_patch_size
+        crop_size = base_image_input_size[0]
+        assert base_image_input_size[0] == base_image_input_size[1]
+
+        left_margin, right_margin = overlap_margins
+        total_margin_pixels = image_patch_size*(right_margin + left_margin)  # pixels removed per dim
+        crop_patches = base_image_input_size[0] // image_patch_size  # patches per crop dim
+        crop_window_patches = crop_patches - (right_margin + left_margin)  # usable patches
+        crop_window_size = crop_window_patches * image_patch_size
+        crop_patch_w = base_image_input_size[1] // image_patch_size
+        crop_patch_h = base_image_input_size[0] // image_patch_size
+        crop_size = base_image_input_size[0]
+
+        tiling = select_tiling(
+            max(original_image_h - total_margin_pixels, 1),
+            max(original_image_w - total_margin_pixels, 1),
+            crop_window_size,
+            max_crops
+        )
+        n_crops = tiling[0] * tiling[1]
+        patch_idx_arr = np.zeros([n_crops, crop_patch_h, crop_patch_w], dtype=np.int32)
+        on = 0
+        on_crop = 0
+        for i in range(tiling[0]):
+            # Slide over `src` by `crop_window_size` steps, but extract crops of size `crops_size`
+            # which results in overlapping crop windows
+            y0 = i*crop_window_size
+            for j in range(tiling[1]):
+                x0 = j*crop_window_size
+                patch_idx = np.arange(crop_patch_w*crop_patch_h).reshape(crop_patch_h, crop_patch_w)
+                patch_idx += on_crop * crop_patch_h * crop_patch_w
+
+                # Mask out idx that are in the overlap region
+                if i != 0:
+                    patch_idx[:left_margin, :] = -1
+                if j != 0:
+                    patch_idx[:, :left_margin] = -1
+                if i != tiling[0]-1:
+                    patch_idx[-right_margin:, :] = -1
+                if j != tiling[1]-1:
+                    patch_idx[:, -right_margin:] = -1
+                patch_idx_arr[on_crop] = patch_idx
+                on_crop += 1
+        return patch_idx_arr, tiling
+
     def build_overlapping_crops(self, image, is_training, rng, max_crops, overlap_margins):
         """Decompose an image into a set of overlapping crops
 
