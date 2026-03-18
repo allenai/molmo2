@@ -14,6 +14,8 @@ import datasets
 
 from olmo.data.dataset import DatasetBase, DATA_HOME, VIDEO_DATA_HOME, Dataset
 from olmo.util import set_example_style
+from olmo.data.dataset import DatasetBase, DATA_HOME, VIDEO_DATA_HOME
+from olmo.util import set_example_style, split_into_groups
 
 
 if DATA_HOME:
@@ -310,6 +312,87 @@ VIDEO_POINT_SUBDIRS = {
     "generated": ["generated_videos"],
 }
 
+VIDEO_CAP_SUBDIRS = [
+    "youtube-cc/youtube-cc-exist", "youtube-cc/youtube-cc-kw", "youtube-cc/youtube-cc-temporal",
+    "youtube_temporal/batch_1", "intern/batch_1", "kw_youtube/batch_1",
+    # LLaVA-Video-178K subdirs (academic_source uses v_ prefix, liwei uses ytb_ prefix)
+    "LLaVA-Video-178K/0_30_s_academic_v0_1/academic_source/activitynet",
+    "LLaVA-Video-178K/30_60_s_academic_v0_1/academic_source/activitynet",
+    "LLaVA-Video-178K/1_2_m_academic_v0_1/academic_source/activitynet",
+    "LLaVA-Video-178K/2_3_m_academic_v0_1/academic_source/activitynet",
+    "LLaVA-Video-178K/0_30_s_youtube_v0_1/liwei_youtube_videos/videos/youtube_video_2024",
+    "LLaVA-Video-178K/30_60_s_youtube_v0_1/liwei_youtube_videos/videos/youtube_video_2024",
+    "LLaVA-Video-178K/1_2_m_youtube_v0_1/liwei_youtube_videos/videos/youtube_video_2024",
+    "LLaVA-Video-178K/2_3_m_youtube_v0_1/liwei_youtube_videos/videos/youtube_video_2024",
+    "LLaVA-Video-178K/1_2_m_youtube_v0_1/liwei_youtube_videos/videos/hdvila",
+]
+
+# Subdirs where videos are stored as {subdir}/{video_id}/{video_file}
+# (as opposed to flat file-based {subdir}/{video_id}.ext)
+_FOLDER_BASED_SUBDIRS = {
+    "youtube-cc/youtube-cc-exist", "youtube-cc/youtube-cc-kw", "youtube-cc/youtube-cc-temporal",
+}
+
+# Koala metadata: downloaded from HF and extracted under VIDEO_DATA_HOME
+_KOALA_META_HF_REPO = "allenai/Molmo2-Cap"
+_KOALA_META_ZIP_NAME = "koala_meta.zip"
+_KOALA_META_DIR = join(VIDEO_DATA_HOME, "koala_meta") if VIDEO_DATA_HOME else None
+
+_koala_yt_to_filename = None  # Lazy-loaded: {youtube_id: koala_filename}
+
+
+def _download_koala_meta():
+    """Download and extract koala_meta.zip from HF if not already present."""
+    if _KOALA_META_DIR is None:
+        raise RuntimeError("MOLMO_DATA_DIR is not set. Cannot determine koala metadata dir.")
+    if os.path.isdir(_KOALA_META_DIR):
+        return
+    import zipfile
+    from huggingface_hub import hf_hub_download
+    logging.info(f"Downloading koala metadata from {_KOALA_META_HF_REPO}...")
+    zip_path = hf_hub_download(
+        repo_id=_KOALA_META_HF_REPO,
+        filename=_KOALA_META_ZIP_NAME,
+        repo_type="dataset",
+        local_dir=VIDEO_DATA_HOME,
+    )
+    logging.info(f"Extracting {zip_path} to {VIDEO_DATA_HOME}...")
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(VIDEO_DATA_HOME)
+    os.remove(zip_path)
+    logging.info("Koala metadata extraction complete.")
+
+
+def _get_koala_lookup():
+    """Lazy-load koala YouTube ID -> filename mapping from metadata JSONs."""
+    global _koala_yt_to_filename
+    if _koala_yt_to_filename is not None:
+        return _koala_yt_to_filename
+
+    _download_koala_meta()
+
+    _koala_yt_to_filename = {}
+    if not os.path.isdir(_KOALA_META_DIR):
+        logging.warning(f"Koala metadata dir not found: {_KOALA_META_DIR}")
+        return _koala_yt_to_filename
+
+    for fname in os.listdir(_KOALA_META_DIR):
+        if not fname.endswith(".json"):
+            continue
+        try:
+            with open(join(_KOALA_META_DIR, fname)) as f:
+                meta = json.load(f)
+            url = meta.get("url", "")
+            if "v=" in url:
+                yt_id = url.split("v=", maxsplit=1)[1]
+                koala_name = fname.replace(".json", "")
+                _koala_yt_to_filename.setdefault(yt_id, koala_name)
+        except Exception as e:
+            logging.warning(f"Failed to read koala metadata {fname}: {e}")
+
+    logging.info(f"Loaded {len(_koala_yt_to_filename)} koala YouTube ID mappings")
+    return _koala_yt_to_filename
+
 
 def _get_cache_path(video_dir, cache_name="youtube_cc.pkl"):
     """Get cache file path for a video directory."""
@@ -428,6 +511,17 @@ def _find_video_point_path_by_id(video_dir, video_id, video_source):
     For video IDs containing '/' (e.g. 'sora2/some_video'), the prefix is treated as a
     sub-subdirectory with '-2fps' appended (e.g. 'video_dir/sora2-2fps/some_video_2fps.mp4').
     """
+    VIDEO_DOWNLOAD_INSTRUCTIONS = (
+        "See the HF repo README for download instructions:\n"
+        "  https://huggingface.co/datasets/allenai/Molmo2-VideoPoint\n"
+        "Place downloaded videos under MOLMO_DATA_DIR/video_datasets/ and convert them to 2fps version so the structure is:\n"
+        "  youtube-cc/youtube-cc-exist-2fps\n"
+        "  youtube-cc/youtube-cc-kw-2fps\n"
+        "  youtube-cc/youtube-cc-temporal-2fps\n"
+        "  MammalNet/trimmed_video-2fps\n"
+        "  generated_videos\n"
+    )
+
     # Initialize cache for this video_dir if needed (load from disk)
     if video_dir not in _video_point_index_cache:
         cache_path = _get_cache_path(video_dir, cache_name="video_point.pkl")
@@ -466,8 +560,114 @@ def _find_video_point_path_by_id(video_dir, video_id, video_source):
 
     searched = ", ".join(subdirs)
     raise FileNotFoundError(
-        f"Video not found for video_id={video_id}, video_source={video_source}. "
-        f"Searched in: {searched}"
+        f"Video not found for video_id={video_id}, video_source={video_source}.\n"
+        f"Searched in: {searched}\n"
+        "Please follow download instructions below:\n"
+        f"{VIDEO_DOWNLOAD_INSTRUCTIONS}"
+    )
+
+
+_video_cap_index_cache = {}  # {video_dir: {video_id: rel_path}}
+_video_cap_cache_modified = set()
+
+
+def _save_all_video_cap_caches():
+    """Save all modified video cap caches to disk on exit."""
+    for video_dir in _video_cap_cache_modified:
+        cache_path = _get_cache_path(video_dir, cache_name="video_cap.pkl")
+        if cache_path and video_dir in _video_cap_index_cache:
+            _save_cache_to_disk(cache_path, _video_cap_index_cache[video_dir])
+
+
+atexit.register(_save_all_video_cap_caches)
+
+
+def _find_video_cap_path_by_id(video_dir, video_id):
+    """Find video path for a Molmo2-Cap video_id.
+
+    Searches VIDEO_CAP_SUBDIRS under video_dir. Handles three layouts:
+      - Folder-based (youtube-cc-*): video_dir/subdir/{video_id}/{video_file}
+      - File-based (intern, kw_youtube, youtube_temporal): video_dir/subdir/{video_id}.{ext}
+      - LLaVA (activitynet uses v_ prefix, liwei uses ytb_ prefix): video_dir/subdir/{prefix}{video_id}.{ext}
+      - Koala: video_id is a YouTube ID, mapped to koala filename via metadata
+
+    Results are cached in memory and persisted to disk on exit.
+    """
+    VIDEO_DOWNLOAD_INSTRUCTIONS = (
+        "See the HF repo README for download instructions:\n"
+        "  https://huggingface.co/datasets/allenai/Molmo2-Cap\n"
+        "Videos are searched under MOLMO_DATA_DIR/video_datasets/ in:\n"
+        "  youtube-cc/{youtube-cc-exist,youtube-cc-kw,youtube-cc-temporal}/{video_id}/{video_file}\n"
+        "  {intern,kw_youtube,youtube_temporal}/batch_1/{video_id}.{ext}\n"
+        "  koala/batch_1/{koala_filename}.mp4 (mapped via koala metadata)\n"
+        "  LLaVA-Video-178K/.../{v_,ytb_}{video_id}.{ext}"
+    )
+    if video_dir not in _video_cap_index_cache:
+        cache_path = _get_cache_path(video_dir, cache_name="video_cap.pkl")
+        if cache_path:
+            _video_cap_index_cache[video_dir] = _load_cache_from_disk(cache_path)
+        else:
+            _video_cap_index_cache[video_dir] = {}
+
+    cache = _video_cap_index_cache[video_dir]
+    if video_id in cache:
+        return join(video_dir, cache[video_id])
+
+    video_exts = (".mp4", ".mov", ".mkv", ".webm")
+
+    # Build list of (subdir, filename_without_ext) candidates to search
+    candidates = []
+    for subdir in VIDEO_CAP_SUBDIRS:
+        if "activitynet" in subdir:
+            # LLaVA activitynet: stored as v_{video_id}.ext
+            candidates.append((subdir, f"v_{video_id}"))
+        elif "youtube_video_2024" in subdir:
+            # LLaVA liwei youtube: stored as ytb_{video_id}.ext
+            candidates.append((subdir, f"ytb_{video_id}"))
+        elif "hdvila" in subdir:
+            # LLaVA hdvila: stored as {video_id}.ext (no prefix)
+            candidates.append((subdir, video_id))
+        else:
+            candidates.append((subdir, video_id))
+
+    # Also try koala: video_id is a YouTube ID, need to map to koala filename
+    koala_lookup = _get_koala_lookup()
+    koala_filename = koala_lookup.get(video_id)
+    if koala_filename:
+        candidates.append(("koala/batch_1", koala_filename))
+
+    for subdir, filename in candidates:
+        if subdir in _FOLDER_BASED_SUBDIRS:
+            # Folder-based: subdir/{video_id}/{video_file}
+            video_folder = join(video_dir, subdir, filename)
+            if exists(video_folder):
+                try:
+                    for f in os.listdir(video_folder):
+                        if f.endswith(video_exts):
+                            rel_path = join(subdir, filename, f)
+                            cache[video_id] = rel_path
+                            _video_cap_cache_modified.add(video_dir)
+                            return join(video_dir, rel_path)
+                except Exception as e:
+                    logging.warning(f"Error reading {video_folder}: {e}")
+        else:
+            # File-based: subdir/{filename}.ext
+            subdir_path = join(video_dir, subdir)
+            if not exists(subdir_path):
+                continue
+            for ext in video_exts:
+                rel_path = join(subdir, f"{filename}{ext}")
+                if exists(join(video_dir, rel_path)):
+                    cache[video_id] = rel_path
+                    _video_cap_cache_modified.add(video_dir)
+                    return join(video_dir, rel_path)
+
+    searched = ", ".join(VIDEO_CAP_SUBDIRS + (["koala/batch_1"] if koala_filename else []))
+    raise FileNotFoundError(
+        f"Video not found for video_id={video_id}.\n"
+        f"Searched in: {searched} under {video_dir}\n"
+        "Please follow download instructions below:\n"
+        f"{VIDEO_DOWNLOAD_INSTRUCTIONS}"
     )
 
 
@@ -565,6 +765,8 @@ class Molmo2VideoPoint(DatasetBase):
 
         rows_with_clips = []
         for row in all_rows:
+            # find video path based on video_id and file structures from source datasets
+            # alternatively, define your own downloaded video's path based on video_id
             video_path = _find_video_point_path_by_id(
                 cls.VIDEO_DIR, row["video_id"], row["video_source"]
             )
@@ -1141,3 +1343,120 @@ class Molmo2SyntheticPoint(Dataset):
             message_list=message_list,
             metadata=dict(example_id=ex["id"])
         )
+
+class Molmo2Captions(DatasetBase):
+    """Loads allenai/Molmo2-Cap from HuggingFace.
+
+    A video captioning dataset with detailed captions (~900 words avg).
+    Each example has: video_id (YouTube), video_start/end timestamps,
+    merged_caption, video_frame_merged_caption, annotation_score, and
+    per-clip/per-frame captions and transcripts.
+
+    Videos must be downloaded separately (YouTube).
+
+    Mirrors the behavior of VixMoCaptions from VideoOlmo, with caption types
+    mapped as follows:
+        HF column                    -> style
+        video_caption                -> video_short_caption
+        merged_caption               -> video_merged_caption
+        video_frame_merged_caption   -> video_long_caption
+    """
+    HF_SOURCE = "allenai/Molmo2-Cap"
+    LOCAL_NAME = "Molmo2-Cap"
+    VIDEO_DIR = VIDEO_DATA_HOME
+
+    CORRUPT_VIDEO_IDS = {
+        "0OfUqrbRa2Y",
+        "mTXBQzptWAg",
+        "NyuA4FatDQk",
+        "a_",
+        "gsfIHiBB6xE",
+        "bXApJtAf6Qo",
+        "N8BlpYSpgg4",
+    }
+
+    # Maps HF column name -> style (same mapping as VixMoCaptions.version2style)
+    CAPTION_KEY_TO_STYLE = {
+        "video_caption": "video_short_caption",
+        "merged_caption": "video_merged_caption",
+        "video_frame_merged_caption": "video_long_caption",
+    }
+
+    @classmethod
+    def download(cls, n_procs=None):
+        for split in ["train", "val"]:
+            _load_hf_dataset(cls.HF_SOURCE, split, f"{cls.LOCAL_NAME}/{split}")
+
+    def __init__(
+        self,
+        split,
+        include_video_caption=False,
+        include_merged_caption=False,
+        include_video_frame_merged_caption=False,
+        min_score=0,
+        max_caption_per_video=4,
+    ):
+        assert any([
+            include_video_caption,
+            include_merged_caption,
+            include_video_frame_merged_caption,
+        ]), "At least one caption type must be included"
+        self.include_video_caption = include_video_caption
+        self.include_merged_caption = include_merged_caption
+        self.include_video_frame_merged_caption = include_video_frame_merged_caption
+        self.min_score = min_score
+        self.max_caption_per_video = max_caption_per_video
+        super().__init__(split)
+
+    def load(self):
+        ds = _load_hf_dataset(self.HF_SOURCE, self.split, f"{self.LOCAL_NAME}/{self.split}")
+
+        cap_versions = []
+        if self.include_merged_caption:
+            cap_versions.append("merged_caption")
+        if self.include_video_caption:
+            cap_versions.append("video_caption")
+        if self.include_video_frame_merged_caption:
+            cap_versions.append("video_frame_merged_caption")
+
+        data = []
+        for row in ds:
+            if row["video_id"] in self.CORRUPT_VIDEO_IDS:
+                continue
+            if row["annotation_score"] < self.min_score:
+                continue
+
+            messages = []
+            for version in cap_versions:
+                caption = row[version]
+                if not caption:
+                    continue
+                messages.append(dict(
+                    text=caption,
+                    style=self.CAPTION_KEY_TO_STYLE[version],
+                ))
+
+            if len(messages) == 0:
+                continue
+
+            for msg_group in split_into_groups(messages, self.max_caption_per_video):
+                data.append((msg_group, row))
+
+        return data
+
+    def get(self, idx, rng):
+        messages, row = self.data[idx]
+        video_id = row["video_id"]
+        # find video path based on video_id and file structures from source datasets
+        # alternatively, define your own downloaded video's path based on video_id
+        video_path = _find_video_cap_path_by_id(self.VIDEO_DIR, video_id)
+        return {
+            "video": video_path,
+            "metadata": dict(
+                video_path=video_path,
+                example_id=idx,
+                video_id=video_id,
+                split=self.split,
+            ),
+            "message_list": messages,
+        }
