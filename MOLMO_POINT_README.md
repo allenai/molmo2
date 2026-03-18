@@ -8,16 +8,20 @@
   <a href="https://github.com/allenai/molmo2/LICENSE">
     <img alt="GitHub License" src="https://img.shields.io/github/license/allenai/OLMo">
   </a>
-  <a href="https://allenai.org/blog/molmo_point">
-    <img alt="Blog Post" src="https://img.shields.io/badge/Molmo2-blog-F0529C">
+  <a href="https://allenai.org/papers/molmopoint">
+    <img alt="Paper" src="https://img.shields.io/badge/MolmoPoint-papr-F0529C">
   </a>
-  <a href="">
-    <img alt="Paper URL" src="https://img.shields.io/badge/arxiv-2601.10611-blue">
+  <a href="https://allenai.org/blog/molmopoint">
+    <img alt="Blog Post" src="https://img.shields.io/badge/MolmoPoint-blog-F0529C">
   </a>
-  <a href="https://huggingface.co/collections/allenai/molmo_point">
+  <a href="https://huggingface.co/collections/allenai/molmopoint">
     <img alt="Model Checkpoints" src="https://img.shields.io/badge/%F0%9F%A4%97%20HF-Models-yellow">
   </a>
+  <a href="https://huggingface.co/collections/allenai/molmopoint-data">
+    <img alt="Data" src="https://img.shields.io/badge/%F0%9F%A4%97%20HF-Data-yellow">
+  </a>
 </p>
+
 
 MolmoPoint is a version of Molmo2 that uses a dot-product based attention mechanism for pointing that improves
 pointing and tracking performance.
@@ -26,8 +30,8 @@ pointing and tracking performance.
   <img src="assets/molmo_point.png" alt="MolmoPoint Model" width="1200" style="margin-left:'auto' margin-right:'auto' display:'block'"/>
 </div>
 
-See our [blog post](https://allenai.org/blog/molmo_point) or our [paper](https://arxiv.org/abs/2601.10611) for more details about Molmo2.
-Huggingface models can be found [here](https://huggingface.co/collections/allenai/molmo_point).
+See our [blog post](https://allenai.org/blog/molmopoint) or our [paper](https://allenai.org/papers/molmopoint) for more details about Molmo2.
+Huggingface models can be found [here](https://huggingface.co/collections/allenai/molmopoint).
 See the [README](https://github.com/allenai/molmo2/blob/main/README.md) for more information about the codebase
 and how to install this codebase.
 
