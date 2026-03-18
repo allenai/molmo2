@@ -23,7 +23,7 @@ MolmoPoint is a version of Molmo2 that uses a dot-product based attention mechan
 pointing and tracking performance.
 
 <div align="center">
-  <img src="assets/molmo_point.pdf" alt="MolmoPoint Model" width="1200" style="margin-left:'auto' margin-right:'auto' display:'block'"/>
+  <img src="assets/molmo_point.png" alt="MolmoPoint Model" width="1200" style="margin-left:'auto' margin-right:'auto' display:'block'"/>
 </div>
 
 See our [blog post](https://allenai.org/blog/molmo_point) or our [paper](https://arxiv.org/abs/2601.10611) for more details about Molmo2.
