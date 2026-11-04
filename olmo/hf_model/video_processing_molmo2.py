@@ -195,6 +195,21 @@ def image_to_patches_and_grids(
     )
 
 
+def snap_ntsc_fps(fps: Union[int, float]) -> float:
+    """
+    Return the integer rate for NTSC-style frame rates, otherwise `fps` as a float.
+
+    NTSC rates are `n * 1000 / 1001` (23.976, 29.97, 59.94, ...) and containers often store them
+    rounded, so rates within 0.2% of an integer snap to that integer. `fps` can be any type that
+    `float()` accepts, including PyAV's `AVRational` (PyAV >= 19), which `int()` rejects.
+    """
+    fps = float(fps)
+    nearest = round(fps)
+    if nearest > 0 and abs(fps - nearest) <= 2e-3 * nearest:
+        return float(nearest)
+    return fps
+
+
 def get_candidate_target_fps(
     video_fps: Union[int, float],
     sampling_fps: Union[int, float],
@@ -202,6 +217,7 @@ def get_candidate_target_fps(
 ) -> list[float]:
     """
     Return the subset of `video_fps` factors that remain multiples of `sampling_fps`.
+    NTSC rates are treated as the integer rate they approximate (29.97 -> 30, see `snap_ntsc_fps`).
 
     Examples:
         >>> get_candidate_target_fps(video_fps=6, sampling_fps=2)
@@ -210,17 +226,20 @@ def get_candidate_target_fps(
         [1, 5]
         >>> get_candidate_target_fps(video_fps=2, sampling_fps=2)
         [2]
+        >>> get_candidate_target_fps(video_fps=29.97, sampling_fps=2)
+        [2, 6]
         >>> get_candidate_target_fps(video_fps=5, sampling_fps=2)
         Traceback (most recent call last):
             ...
         ValueError: sampling_fps=2 must divide video_fps=5 to produce consistent frame steps.
     """
-    video_fps = int(video_fps)
+    if sampling_fps is None:
+        raise ValueError("sampling_fps must be provided")
+
+    video_fps = int(snap_ntsc_fps(video_fps))
     sampling_fps = int(sampling_fps)
     max_fps = int(max_fps)
 
-    if sampling_fps is None:
-        raise ValueError("sampling_fps must be provided")
     if video_fps <= 0 or sampling_fps <= 0:
         raise ValueError(f"video_fps and sampling_fps must be positive (got {video_fps}, {sampling_fps})")
     if video_fps % sampling_fps != 0:
@@ -505,6 +524,7 @@ def get_target_fps(
     """
     Get the target fps that best spans the video and has the most frames sampled
     """
+    video_fps = snap_ntsc_fps(video_fps)
     num_frames_sampled = 0
     selected_target_fps = None
     for target_fps in candidate_target_fps:
@@ -540,6 +560,7 @@ def get_frame_times_and_chosen_fps(
     if selected_target_fps is None:
         frame_indices = np.linspace(0, total_frames, max_frames, endpoint=False, dtype=int)
     else:
+        video_fps = snap_ntsc_fps(video_fps)
         step_size = max(int(video_fps / selected_target_fps), 1)
         frame_indices = np.arange(0, total_frames, step_size)
     if len(frame_indices) > max_frames:
